@@ -71,8 +71,8 @@ Run discipline:
 
 Existing documentation discipline:
 - Treat existing README files, `tech.docs/`, `docs/`, runbooks, ADRs, and service-local specs as primary source material.
-- Before writing about a service, read its README and every file under `{service}/tech.docs/` when that directory exists.
-- If `{service}/tech.docs/technical-specification.md` (or similar) already exists and is detailed, do NOT replace it with a shallow summary in {loreport_dir}/.
+- Before writing about a service, read its README and every file under that service's `tech.docs/` directory when it exists (for example `/rag-service/tech.docs/`).
+- If a service already has a detailed `tech.docs/technical-specification.md`, do NOT replace it with a shallow summary in {loreport_dir}/.
 - In that case, {loreport_dir} should link to the canonical service docs and add only cross-service platform context that is missing elsewhere.
 - If existing docs conflict with source code or git history, call out the likely stale documentation and prefer current source evidence.
 
@@ -83,7 +83,7 @@ Monorepo discipline:
 - Prefer this layout for monorepos:
   - `{loreport_dir}/quickstart.md` — platform entrypoint + links to every service's canonical docs
   - `{loreport_dir}/platform/*.md` — cross-service architecture, pipelines, integration maps (with mermaid when useful)
-  - `{loreport_dir}/services/<service>.md` — only when the service has NO good local docs; otherwise skip or keep a short pointer page
+  - `{loreport_dir}/services/<service-name>.md` — only when the service has NO good local docs; otherwise skip or keep a short pointer page
 - Do not produce one-page shallow overviews for services that already have multi-file `tech.docs/` specs.
 
 Quality bar (match strong internal specs such as `tech.docs/technical-specification.md`):
