@@ -1,0 +1,34 @@
+# Drop-in Loreport sidecar — pull image from Docker Hub (Grafana-style).
+#
+# 1. Add to your docker-compose.yml:
+#      include:
+#        - path: ./vendor/loreport/docker/compose.loreport.yaml
+#
+# 2. In .env:
+#      LOREPORT_IMAGE=your-dockerhub-user/loreport:latest
+#      OPENAI_API_KEY=sk-...
+#      LOREPORT_LANGUAGE=ru
+
+services:
+  loreport:
+    image: ${LOREPORT_IMAGE:-loreport/loreport:latest}
+    pull_policy: always
+    ports:
+      - "${LOREPORT_PORT:-3080}:3080"
+    volumes:
+      - ${LOREPORT_REPO_PATH:-.}:/repo:rw
+      - loreport-data:/data
+    environment:
+      REPO_PATH: /repo
+      LOREPORT_MODE: standalone
+      LOREPORT_DATA_DIR: /data
+      LOREPORT_DIR: loreport
+      LOREPORT_LANGUAGE: ${LOREPORT_LANGUAGE:-ru}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      LOREPORT_PROVIDER: ${LOREPORT_PROVIDER:-openai}
+      LOREPORT_MODEL_ID: ${LOREPORT_MODEL_ID:-}
+      STATIC_DIR: /app/static
+    restart: unless-stopped
+
+volumes:
+  loreport-data:

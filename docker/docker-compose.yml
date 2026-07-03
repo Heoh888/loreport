@@ -1,0 +1,26 @@
+services:
+  loreport:
+    image: ${LOREPORT_IMAGE:-loreport:latest}
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    ports:
+      - "${LOREPORT_PORT:-3080}:3080"
+    volumes:
+      - ${REPO_PATH:-..}:/repo:rw
+      - loreport-data:/data
+    env_file:
+      - path: ../.env
+        required: false
+    environment:
+      REPO_PATH: /repo
+      LOREPORT_DIR: loreport
+      LOREPORT_MODE: standalone
+      LOREPORT_DATA_DIR: /data
+      STATIC_DIR: /app/static
+      POLL_INTERVAL_SEC: ${POLL_INTERVAL_SEC:-300}
+      WEBHOOK_SECRET: ${WEBHOOK_SECRET:-}
+    restart: unless-stopped
+
+volumes:
+  loreport-data:
