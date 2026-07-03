@@ -11,7 +11,7 @@
 
 services:
   loreport:
-    image: ${LOREPORT_IMAGE:-loreport/loreport:latest}
+    image: ${LOREPORT_IMAGE:-alexhod/loreport:latest}
     pull_policy: always
     ports:
       - "${LOREPORT_PORT:-3080}:3080"
