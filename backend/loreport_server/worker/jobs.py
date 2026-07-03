@@ -40,24 +40,38 @@ async def process_job(payload: SyncJobPayload) -> None:
             job.git_head = None
         await session.commit()
 
-        try:
-            changed = await run_loreport_agent(
-                payload.command,
-                repo_path,
-                loreport_dir=settings.loreport_dir,
-                model_id=settings.loreport_model_id,
-                provider=settings.loreport_provider,
-                language=payload.language or settings.loreport_language,
-            )
-            job.status = "done"
-            job.changed = changed
-            job.model = resolved_model
-            job.snapshot_after = create_loreport_content_snapshot(repo_path, settings.loreport_dir)
-            job.error = None
-        except Exception as exc:  # noqa: BLE001
-            logger.exception("Job %s failed", job_id)
-            job.status = "failed"
-            job.error = str(exc)
-        finally:
-            job.finished_at = datetime.now(UTC)
-            await session.commit()
+    changed = False
+    error: str | None = None
+    status = "done"
+    try:
+        logger.info("Agent started job=%s command=%s repo=%s", job_id, payload.command, repo_path)
+        changed = await run_loreport_agent(
+            payload.command,
+            repo_path,
+            loreport_dir=settings.loreport_dir,
+            model_id=settings.loreport_model_id,
+            provider=settings.loreport_provider,
+            language=payload.language or settings.loreport_language,
+        )
+        logger.info("Agent finished job=%s changed=%s", job_id, changed)
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("Job %s failed", job_id)
+        status = "failed"
+        error = str(exc)
+
+    async with session_factory() as session:
+        result = await session.execute(select(SyncJob).where(SyncJob.id == job_id))
+        job = result.scalar_one_or_none()
+        if job is None:
+            return
+        job.status = status
+        job.changed = changed if status == "done" else None
+        job.model = resolved_model if status == "done" else job.model
+        job.snapshot_after = (
+            create_loreport_content_snapshot(repo_path, settings.loreport_dir)
+            if status == "done"
+            else job.snapshot_after
+        )
+        job.error = error
+        job.finished_at = datetime.now(UTC)
+        await session.commit()

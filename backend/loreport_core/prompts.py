@@ -64,8 +64,39 @@ Run discipline:
 - Never pass host absolute paths like /Users/... to filesystem tools.
 - Shell execute commands run on the host. If you use execute, run commands from the target repository directory and keep them inside that repository.
 - Do not exhaustively read every file. Inspect the repository tree, package/config files, README-style files, entrypoints, routing files, and representative files for each major domain.
+- Do not call glob with `**/*` from the repository root. Never use glob patterns where `**` is not a whole path component (for example avoid `**/*.py`; use `/src/*.py` or `ls` + targeted reads instead).
+- For large monorepos, discover one top-level service or domain at a time with `ls /service-name` before reading files inside it.
 - Prefer grep/glob and short targeted reads over full-file reads when files are large.
-- Keep the initial documentation set focused: quickstart plus the smallest set of section pages needed to explain the repo clearly.
+- Keep the initial documentation set focused, but never sacrifice depth for brevity on critical domains.
+
+Existing documentation discipline:
+- Treat existing README files, `tech.docs/`, `docs/`, runbooks, ADRs, and service-local specs as primary source material.
+- Before writing about a service, read its README and every file under `{service}/tech.docs/` when that directory exists.
+- If `{service}/tech.docs/technical-specification.md` (or similar) already exists and is detailed, do NOT replace it with a shallow summary in {loreport_dir}/.
+- In that case, {loreport_dir} should link to the canonical service docs and add only cross-service platform context that is missing elsewhere.
+- If existing docs conflict with source code or git history, call out the likely stale documentation and prefer current source evidence.
+
+Monorepo discipline:
+- Discover top-level services with `ls /` first. Typical signs: `*-service/`, `*-worker/`, `gateway/`, each with its own README or Dockerfile.
+- Find all existing `tech.docs/` trees before writing. Example: `/rag-service/tech.docs/`.
+- For monorepos, {loreport_dir}/quickstart.md is a platform navigation hub, not a substitute for service-local `tech.docs/`.
+- Prefer this layout for monorepos:
+  - `{loreport_dir}/quickstart.md` — platform entrypoint + links to every service's canonical docs
+  - `{loreport_dir}/platform/*.md` — cross-service architecture, pipelines, integration maps (with mermaid when useful)
+  - `{loreport_dir}/services/<service>.md` — only when the service has NO good local docs; otherwise skip or keep a short pointer page
+- Do not produce one-page shallow overviews for services that already have multi-file `tech.docs/` specs.
+
+Quality bar (match strong internal specs such as `tech.docs/technical-specification.md`):
+- A service page is inadequate if it only lists endpoints or dependencies in bullets without flows, boundaries, and concrete names from code.
+- When you must write or extend service documentation, include where applicable:
+  - purpose, goals, explicit non-goals / out-of-scope
+  - mermaid diagram for architecture or main flow
+  - step-by-step scenario with exact HTTP paths, queue names, and status transitions
+  - integration table with named systems and why they are used
+  - project tree for the service from actual directory layout
+  - links to related rabbitmq-events, ER diagrams, curl examples when they exist
+- Read routers, models, messaging, and config files — not only README — before describing behavior.
+- Prefer depth on fewer critical services over shallow coverage of every folder.
 
 Subagent discipline:
 - You may use the task tool to parallelize read-only research during init and update runs.
@@ -109,7 +140,11 @@ def _mode_instructions(command: LoreportCommand, loreport_dir: str) -> str:
 - This is an initial documentation run.
 - Build the documentation structure from scratch under {loreport_dir}/.
 - Create {loreport_dir}/quickstart.md first, then linked section pages.
-- Use at most 8 documentation pages unless the repository is tiny.
+- Step 1: inventory existing service docs (`tech.docs/`, README) across the repo.
+- Step 2: write platform-level pages only where they add value beyond existing service specs.
+- Step 3: for services without good local docs, write full-depth pages under {loreport_dir}/services/.
+- For monorepos with existing `tech.docs/`, link to them prominently; do not downgrade them into brief summaries.
+- Use up to 12 pages for monorepos; up to 8 for small single-service repositories.
 """.strip()
     return f"""
 - This is a maintenance update run.
@@ -135,6 +170,11 @@ Initialize Loreport documentation for this repository.
 
 Inspect the project thoroughly and write the initial documentation under {loreport_dir}/.
 Start with {loreport_dir}/quickstart.md as the entrypoint.{lang_note}
+
+Quality requirement:
+- If the repository already contains detailed service specs (for example `rag-service/tech.docs/`), Loreport must not produce weaker one-page summaries.
+- Link to existing `tech.docs/` as canonical deep documentation and focus Loreport on platform navigation plus missing cross-service views.
+- When writing new service docs, match the depth of a strong `technical-specification.md` (diagrams, flows, API/queue names, boundaries).
 
 Git context:
 {context.git_summary}

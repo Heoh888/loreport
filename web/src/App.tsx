@@ -165,6 +165,9 @@ export function App() {
         {status?.head && status.head !== "HEAD" && (
           <p className="mono">HEAD {status.head.slice(0, 12)}…</p>
         )}
+        {status?.state === "running" && (
+          <p className="muted">Init на большом репозитории может занять 10–30 минут. Следи за логами контейнера.</p>
+        )}
         {status?.error && <p className="error">{status.error}</p>}
 
         <label className="field">

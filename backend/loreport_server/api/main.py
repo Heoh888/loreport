@@ -16,7 +16,14 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(levelname)s:%(name)s:%(message)s",
+    )
     await init_db()
+    from loreport_server.worker.recovery import recover_stale_jobs
+
+    await recover_stale_jobs()
     settings = get_settings()
     stop_event = asyncio.Event()
     worker_task: asyncio.Task | None = None
