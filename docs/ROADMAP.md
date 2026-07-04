@@ -60,15 +60,15 @@ MVP intentionally stops before git write credentials and PR automation. Architec
 
 **Theme:** Prove the sidecar loop works.
 
-- Sidecar: FastAPI + RabbitMQ worker + PostgreSQL
+- Sidecar: FastAPI + in-process worker + SQLite
 - Web UI: sync dashboard + docs browser
-- Git webhook + HEAD polling
+- Git webhook + HEAD polling (backlog)
 - Agent init/update (ported from OpenWiki → Python deepagents)
 - Snapshot-based incremental sync
-- Docker Compose deploy (api, worker, postgres, rabbitmq)
+- Docker single-container deploy
 - Single repository
 
-**Outputs:** `loreport/*.md`, `.last-update.json`, job history in PostgreSQL
+**Outputs:** `loreport/*.md`, `.last-update.json`, job history in SQLite
 
 ---
 

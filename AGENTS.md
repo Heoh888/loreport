@@ -1,11 +1,16 @@
 ## Loreport
 
-This repository has engineering lore located in the /loreport directory.
+This repository contains starter documentation for **Loreport** — an open-source sidecar service for living engineering knowledge.
 
 Start here:
-- [Loreport quickstart](loreport/quickstart.md)
 
-Loreport includes repository overview, architecture notes, workflows, domain concepts, operations, integrations, testing guidance, and source maps.
+- [Full project context](docs/CONTEXT.md) — handoff document with complete background
+- [Vision](docs/VISION.md) — product positioning
+- [Architecture](docs/ARCHITECTURE.md) — technical design
+- [MVP plan](docs/MVP.md) — first sprint scope
+- [Roadmap](docs/ROADMAP.md) — version plan
+- [OpenWiki adaptation](docs/OPENWIKI-ADAPTATION.md) — what to reuse from langchain-ai/openwiki
 
-When working in this repository, read the Loreport quickstart first, then follow its links to the relevant architecture, workflow, domain, operation, and testing notes.
+When working in this repository, read `docs/CONTEXT.md` first for full background, then follow links to the relevant design docs.
 
+Reference implementation source: `/Users/aleksejhodakov/openwiki` (langchain-ai/openwiki, MIT).

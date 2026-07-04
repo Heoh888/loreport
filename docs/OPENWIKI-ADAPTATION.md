@@ -88,7 +88,7 @@ dependencies = [
 ]
 ```
 
-Server adds: `fastapi`, `uvicorn`, `sqlalchemy[asyncio]`, `asyncpg`, `alembic`, `aio-pika`, `markdown`.
+Server adds: `fastapi`, `uvicorn`, `sqlalchemy[asyncio]`, `aiosqlite`, `markdown`.
 
 Web adds its own deps via `web/package.json` (react, vite, shadcn).
 

@@ -181,12 +181,12 @@ OpenWiki — TypeScript CLI. Loreport backend — **Python**. Переносим
 
 **Не весь knowledge graph.** Только:
 
-1. Sidecar: FastAPI (api) + worker + RabbitMQ + PostgreSQL
-2. Web UI: dashboard (sync status, history) + docs browser (React)
-3. Git webhook + HEAD polling
+1. Sidecar: FastAPI + in-process worker + SQLite
+2. Web UI: dashboard (sync status) + docs browser (React)
+3. Git webhook + HEAD polling (not yet)
 4. Agent `init` / `update` (порт из OpenWiki → Python deepagents)
 5. Snapshot skip для пустых обновлений
-6. Docker Compose (api, worker, postgres, rabbitmq)
+6. Docker single-container sidecar
 
 **Definition of Done v0.1:**
 - `docker compose up` → UI на `:3080`
@@ -215,7 +215,7 @@ OpenWiki — TypeScript CLI. Loreport backend — **Python**. Переносим
 | Backend | Python 3.11+ |
 | API | FastAPI + uvicorn |
 | DB | PostgreSQL + SQLAlchemy 2.0 + Alembic |
-| Queue | RabbitMQ + aio-pika |
+| Queue | in-process asyncio.Queue |
 | UI | React + Vite + shadcn (pnpm) |
 | Agent | deepagents + langchain (Python) |
 | Backend tooling | uv, ruff |
@@ -249,7 +249,7 @@ PUT  /api/settings
 - [ ] Port agent core from OpenWiki (Python)
 - [ ] API + worker MVP
 - [ ] Web UI MVP
-- [ ] Docker Compose (api, worker, postgres, rabbitmq)
+- [x] Docker single-container sidecar
 
 ---
 

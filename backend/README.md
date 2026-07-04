@@ -1,6 +1,6 @@
 # Loreport Backend
 
-Python backend: `loreport_core` (agent library) + `loreport_server` (FastAPI + worker).
+Python backend: `loreport_core` (agent library) + `loreport_server` (FastAPI + in-process worker).
 
 Agent logic adapted from [langchain-ai/openwiki](https://github.com/langchain-ai/openwiki) (MIT License).
 
@@ -12,11 +12,7 @@ uv sync
 uv run uvicorn loreport_server.api.main:app --reload --port 3080
 ```
 
-Worker (separate terminal):
-
-```bash
-uv run python -m loreport_server.worker.consumer
-```
+Worker runs in the same process (asyncio queue in `queue/local.py`).
 
 ## Docker
 

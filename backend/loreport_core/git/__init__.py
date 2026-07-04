@@ -10,9 +10,7 @@ __all__ = [
     "RunContext",
     "create_run_context",
     "get_head",
-    "get_status_short",
     "read_last_update",
-    "read_last_update_metadata",
     "run_git",
     "write_last_update_metadata",
 ]
@@ -35,24 +33,6 @@ async def run_git(repo_path: Path, *args: str) -> str:
 async def get_head(repo_path: Path) -> str:
     head = await run_git(repo_path, "rev-parse", "HEAD")
     return head.splitlines()[0] if head else ""
-
-
-async def get_status_short(repo_path: Path) -> str:
-    return await run_git(repo_path, "status", "--short")
-
-
-async def read_last_update_metadata(
-    repo_path: Path, loreport_dir: str = LOREPORT_DIR
-) -> dict | None:
-    meta = await read_last_update(repo_path, loreport_dir)
-    if meta is None:
-        return None
-    return {
-        "updatedAt": meta.updated_at,
-        "command": meta.command,
-        "gitHead": meta.git_head,
-        "model": meta.model,
-    }
 
 
 async def write_last_update_metadata(

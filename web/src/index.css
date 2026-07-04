@@ -159,6 +159,16 @@ select {
   color: #93c5fd;
 }
 
+.markdown-body a.doc-internal-link {
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.markdown-body a.doc-internal-link:hover {
+  color: #bfdbfe;
+}
+
 .markdown-body code {
   background: #0f1117;
   border: 1px solid #2a2f3a;
@@ -180,6 +190,33 @@ select {
   background: none;
   border: none;
   padding: 0;
+}
+
+.markdown-body .mermaid {
+  margin: 1rem 0;
+  padding: 1rem;
+  background: #0f1117;
+  border: 1px solid #2a2f3a;
+  border-radius: 8px;
+  overflow: auto;
+}
+
+.markdown-body .mermaid svg {
+  max-width: 100%;
+  height: auto;
+}
+
+.markdown-body .mermaid-fallback {
+  margin: 1rem 0;
+}
+
+.markdown-body .mermaid-error {
+  background: #0f1117;
+  border: 1px solid #7f1d1d;
+  border-radius: 8px;
+  padding: 0.75rem 1rem;
+  overflow: auto;
+  margin-top: 0.5rem;
 }
 
 @media (max-width: 760px) {

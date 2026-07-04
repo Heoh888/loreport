@@ -29,8 +29,6 @@ async def create_run_context(
     loreport_dir: str = LOREPORT_DIR,
 ) -> RunContext:
     last_update = await read_last_update(repo_path, loreport_dir)
-    if command == "chat":
-        return RunContext(last_update=last_update, git_summary="Not applicable for chat.")
     git_summary = await create_git_summary(command, repo_path, last_update, loreport_dir)
     return RunContext(last_update=last_update, git_summary=git_summary)
 

@@ -15,10 +15,8 @@ services:
     environment:
       REPO_PATH: /repo
       LOREPORT_DIR: loreport
-      LOREPORT_MODE: standalone
       LOREPORT_DATA_DIR: /data
       STATIC_DIR: /app/static
-      POLL_INTERVAL_SEC: ${POLL_INTERVAL_SEC:-300}
       WEBHOOK_SECRET: ${WEBHOOK_SECRET:-}
     restart: unless-stopped
 

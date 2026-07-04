@@ -28,7 +28,6 @@ COPY --from=python-deps /app/backend /app/backend
 COPY --from=web /src/web/dist /app/static
 ENV PATH="/app/backend/.venv/bin:$PATH"
 ENV STATIC_DIR=/app/static
-ENV LOREPORT_MODE=standalone
 ENV LOREPORT_DATA_DIR=/data
 ENV REPO_PATH=/repo
 WORKDIR /app/backend

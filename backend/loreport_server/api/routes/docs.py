@@ -29,6 +29,17 @@ def _lore_root(settings: Settings) -> Path:
     return Path(settings.repo_path) / settings.loreport_dir
 
 
+def _resolve_doc_path(root: Path, path: str) -> Path:
+    file_path = (root / path).resolve()
+    try:
+        file_path.relative_to(root.resolve())
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail="Document not found") from exc
+    if not file_path.is_file() or file_path.suffix != ".md":
+        raise HTTPException(status_code=404, detail="Document not found")
+    return file_path
+
+
 def _build_tree(directory: Path, base: Path) -> list[DocTreeNode]:
     if not directory.is_dir():
         return []
@@ -56,9 +67,7 @@ async def docs_content(
     path: str = Query(..., min_length=1),
     settings: Settings = Depends(get_settings),
 ) -> DocContentResponse:
-    file_path = _lore_root(settings) / path
-    if not file_path.is_file() or file_path.suffix != ".md":
-        raise HTTPException(status_code=404, detail="Document not found")
+    file_path = _resolve_doc_path(_lore_root(settings), path)
     stat = file_path.stat()
     return DocContentResponse(
         path=path,
@@ -72,8 +81,6 @@ async def docs_render(
     path: str = Query(..., min_length=1),
     settings: Settings = Depends(get_settings),
 ) -> DocRenderResponse:
-    file_path = _lore_root(settings) / path
-    if not file_path.is_file() or file_path.suffix != ".md":
-        raise HTTPException(status_code=404, detail="Document not found")
+    file_path = _resolve_doc_path(_lore_root(settings), path)
     content = file_path.read_text(encoding="utf-8")
     return DocRenderResponse(html=markdown.markdown(content, extensions=["tables", "fenced_code"]))

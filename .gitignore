@@ -3,8 +3,7 @@ dist/
 .env
 .env.*
 !.env.example
-/.last-update.json
-loreport/_plan.md
+loreport/
 /data/
 *.db
 *.sqlite
@@ -17,5 +16,3 @@ backend/.venv/
 .pytest_cache/
 *.egg-info/
 web/dist/
-docker/wheels/
-docker/requirements.txt

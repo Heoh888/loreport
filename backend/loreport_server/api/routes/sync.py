@@ -13,7 +13,7 @@ from loreport_core.types import LoreportCommand
 from loreport_server.config import Settings, get_settings
 from loreport_server.db.models import SyncJob
 from loreport_server.db.session import get_session
-from loreport_server.queue.publisher import publish_sync_job
+from loreport_server.queue.local import publish_sync_job
 
 router = APIRouter(prefix="/api/sync", tags=["sync"])
 
@@ -63,7 +63,6 @@ async def trigger_sync(
     await session.refresh(job)
 
     await publish_sync_job(
-        settings,
         job_id=job.id,
         command=body.command,
         repo_path=str(repo_path),

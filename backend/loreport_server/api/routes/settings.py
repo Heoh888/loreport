@@ -15,7 +15,6 @@ class LanguageOption(BaseModel):
 class SettingsResponse(BaseModel):
     provider: str
     model_id: str | None
-    poll_interval_sec: int
     language: str
     languages: list[LanguageOption]
 
@@ -26,7 +25,6 @@ async def read_settings(settings: Settings = Depends(get_settings)) -> SettingsR
     return SettingsResponse(
         provider=settings.loreport_provider,
         model_id=settings.loreport_model_id,
-        poll_interval_sec=settings.poll_interval_sec,
         language=language,
         languages=[
             LanguageOption(code=code, label=label)

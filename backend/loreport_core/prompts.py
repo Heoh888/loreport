@@ -14,7 +14,7 @@ This repository has engineering lore located in the /{LOREPORT_DIR} directory.
 Start here:
 - [Loreport quickstart]({LOREPORT_DIR}/quickstart.md)
 
-Loreport includes repository overview, architecture notes, workflows, domain concepts, operations, integrations, testing guidance, and source maps.
+Loreport includes repository overview, architecture notes, workflows, domain concepts, operations, testing guidance, and source maps.
 
 When working in this repository, read the Loreport quickstart first, then follow its links to the relevant architecture, workflow, domain, operation, and testing notes."""
 
@@ -91,6 +91,7 @@ Quality bar (match strong internal specs such as `tech.docs/technical-specificat
 - When you must write or extend service documentation, include where applicable:
   - purpose, goals, explicit non-goals / out-of-scope
   - mermaid diagram for architecture or main flow
+  - for mermaid node labels with slashes or paths, use quoted rectangles like `A["/repo/loreport"]`, never parallelogram `[/path/with/slashes/]`
   - step-by-step scenario with exact HTTP paths, queue names, and status transitions
   - integration table with named systems and why they are used
   - project tree for the service from actual directory layout

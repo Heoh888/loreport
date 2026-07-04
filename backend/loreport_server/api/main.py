@@ -10,6 +10,7 @@ from fastapi.staticfiles import StaticFiles
 from loreport_server.api.routes import docs, health, settings, sync, webhooks
 from loreport_server.config import get_settings
 from loreport_server.db.session import init_db
+from loreport_server.queue.local import run_standalone_worker
 
 logger = logging.getLogger(__name__)
 
@@ -24,21 +25,14 @@ async def lifespan(_app: FastAPI):
     from loreport_server.worker.recovery import recover_stale_jobs
 
     await recover_stale_jobs()
-    settings = get_settings()
     stop_event = asyncio.Event()
-    worker_task: asyncio.Task | None = None
-
-    if settings.is_standalone:
-        from loreport_server.queue.local import run_standalone_worker
-
-        worker_task = asyncio.create_task(run_standalone_worker(stop_event))
-        logger.info("Loreport standalone mode: api + in-process worker")
+    worker_task = asyncio.create_task(run_standalone_worker(stop_event))
+    logger.info("Loreport started: api + in-process worker")
 
     yield
 
-    if worker_task is not None:
-        stop_event.set()
-        await worker_task
+    stop_event.set()
+    await worker_task
 
 
 app = FastAPI(title="Loreport", version="0.1.0", lifespan=lifespan)
@@ -51,8 +45,14 @@ app.include_router(settings.router)
 
 settings = get_settings()
 static_dir = Path(settings.static_dir) if settings.static_dir else None
+INDEX_HEADERS = {"Cache-Control": "no-cache"}
+
 if static_dir and static_dir.is_dir():
     app.mount("/assets", StaticFiles(directory=static_dir / "assets"), name="assets")
+
+    @app.get("/")
+    async def spa_index() -> FileResponse:
+        return FileResponse(static_dir / "index.html", headers=INDEX_HEADERS)
 
     @app.get("/{full_path:path}")
     async def spa_fallback(full_path: str) -> FileResponse:
@@ -64,4 +64,4 @@ if static_dir and static_dir.is_dir():
         file_path = static_dir / full_path
         if file_path.is_file():
             return FileResponse(file_path)
-        return FileResponse(index)
+        return FileResponse(index, headers=INDEX_HEADERS)

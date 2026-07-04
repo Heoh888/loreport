@@ -11,15 +11,15 @@ Ship a working sidecar in 4–6 weeks that proves the core loop:
 ### In
 
 - [x] Documentation and vision (this repo)
-- [ ] Backend scaffold (`backend/` — uv, `loreport_core`, `loreport_server`)
-- [ ] `web/` — React dashboard + docs browser (pnpm)
-- [ ] Agent ported from OpenWiki → Python `deepagents`
-- [ ] FastAPI + PostgreSQL + RabbitMQ (api + worker split)
-- [ ] Git HEAD polling (5 min default)
+- [x] Backend (`backend/` — uv, `loreport_core`, `loreport_server`)
+- [x] `web/` — React dashboard + docs browser (pnpm)
+- [x] Agent ported from OpenWiki → Python `deepagents`
+- [x] FastAPI standalone (SQLite + in-process worker)
+- [ ] Git HEAD polling
 - [ ] Git webhook endpoint
-- [ ] Docker Compose (api, worker, postgres, rabbitmq)
-- [ ] Snapshot-based change detection
-- [ ] Single repository support
+- [x] Docker Compose (single container)
+- [x] Snapshot-based change detection
+- [x] Single repository support
 
 ### Out (explicitly deferred)
 

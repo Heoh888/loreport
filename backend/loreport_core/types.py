@@ -2,7 +2,7 @@ from typing import Literal
 
 from pydantic import BaseModel
 
-LoreportCommand = Literal["init", "update", "chat"]
+LoreportCommand = Literal["init", "update"]
 SyncJobStatus = Literal["pending", "running", "done", "failed"]
 
 

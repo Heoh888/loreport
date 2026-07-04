@@ -47,19 +47,6 @@ PROVIDER_DEFAULT_MODEL: dict[LoreportProvider, str] = {
     "fireworks": "accounts/fireworks/models/glm-5p2",
 }
 
-OPENROUTER_FALLBACK_MODEL_IDS = [
-    "openai/gpt-5.4-mini",
-    "anthropic/claude-sonnet-5",
-]
-
-PROVIDER_BASE_URL: dict[LoreportProvider, str | None] = {
-    "openrouter": OPENROUTER_BASE_URL,
-    "anthropic": None,
-    "openai": None,
-    "baseten": "https://inference.baseten.co/v1",
-    "fireworks": "https://api.fireworks.ai/inference/v1",
-}
-
 
 def resolve_provider(provider: str | None = None) -> LoreportProvider:
     raw = (provider or os.environ.get(LOREPORT_PROVIDER_ENV_KEY) or "").strip().lower()

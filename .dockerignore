@@ -1,5 +1,17 @@
 .git
+.gitignore
 **/__pycache__
 **/.pytest_cache
 **/.ruff_cache
+**/.venv
+**/*.egg-info
+.env
+.env.*
+!.env.example
+*.db
+*.sqlite
+/data/
+backend/.venv/
 web/node_modules
+web/dist/
+loreport/

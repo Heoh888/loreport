@@ -32,56 +32,54 @@ Every mature codebase develops its own lore. It is rarely written down explicitl
 
 ## How It Fits Your Stack
 
+Standalone sidecar — one container, SQLite, in-process worker:
+
 ```yaml
 services:
-  app:
-    volumes: [./:/app]
-  grafana:
-    image: grafana/grafana
-  postgres:
-    image: postgres:16-alpine
-  rabbitmq:
-    image: rabbitmq:3-management-alpine
-  loreport-api:
-    image: loreport/loreport
+  loreport:
+    image: alexhod/loreport:latest
     ports: ["3080:3080"]
-    volumes: [./:/repo]
+    volumes:
+      - .:/repo:rw
+      - loreport-data:/data
     environment:
-      REPO_PATH: /repo
-      DATABASE_URL: postgresql+asyncpg://loreport:${POSTGRES_PASSWORD}@postgres/loreport
-      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
-      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY}
-  loreport-worker:
-    image: loreport/loreport
-    command: ["python", "-m", "loreport_server.worker.consumer"]
-    volumes: [./:/repo]
-    environment:
-      REPO_PATH: /repo
-      DATABASE_URL: postgresql+asyncpg://loreport:${POSTGRES_PASSWORD}@postgres/loreport
-      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
-      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY}
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      LOREPORT_LANGUAGE: ru
+
+volumes:
+  loreport-data:
 ```
 
-Open `http://localhost:3080` — browse lore, check sync status, trigger updates.
+Open `http://localhost:3080` — browse lore, check sync status, trigger init/update.
+
+**Local development** (build from source):
+
+```bash
+docker compose -f docker/docker-compose.yml up --build
+```
+
+Set `REPO_PATH=..` in `.env` to analyze this repo itself.
 
 ## MVP Scope (v0.1)
 
-- [ ] FastAPI sidecar + RabbitMQ worker + PostgreSQL
-- [ ] Web UI: sync dashboard + docs browser (React)
-- [ ] Git webhook + HEAD polling
-- [ ] `init` / `update` agent runs (ported from [langchain-ai/openwiki](https://github.com/langchain-ai/openwiki))
-- [ ] Snapshot-based incremental updates (no empty sync loops)
-- [ ] Single-repo, Docker Compose deploy
+- [x] FastAPI sidecar (standalone: SQLite + in-process worker)
+- [x] Web UI: sync dashboard + docs browser (React)
+- [x] `init` / `update` agent runs (ported from [langchain-ai/openwiki](https://github.com/langchain-ai/openwiki))
+- [x] Snapshot-based incremental updates (no empty sync loops)
+- [x] Language selection for generated docs
+- [x] Docker image on Docker Hub (`alexhod/loreport`)
+- [ ] Git webhook → sync job
+- [ ] HEAD polling scheduler
 
 **Not in MVP:** multi-repo, RAG search, vulnerability scanning, AST graph, RBAC, auto-PR.
 
-## Repository Structure (planned)
+## Repository Structure
 
 ```
 loreport/
 ├── backend/
 │   ├── loreport_core/    # agent, git evidence, snapshots, prompts
-│   └── loreport_server/  # FastAPI, worker, PostgreSQL, RabbitMQ
+│   └── loreport_server/  # FastAPI + worker
 ├── web/                  # React dashboard + docs browser
 ├── docker/
 │   ├── Dockerfile
@@ -93,12 +91,11 @@ loreport/
 
 | Layer | Choice |
 |-------|--------|
-| Backend | Python 3.11+, FastAPI |
-| Database | PostgreSQL, SQLAlchemy, Alembic |
-| Queue | RabbitMQ, aio-pika |
+| Backend | Python 3.11+, FastAPI, SQLAlchemy |
+| Database | SQLite (standalone) |
 | Agent | deepagents, langchain (Python) |
-| Frontend | React, Vite, shadcn |
-| Deploy | Docker (api + worker) |
+| Frontend | React, Vite |
+| Deploy | Docker single-container sidecar |
 
 ## Documentation
 
@@ -110,6 +107,7 @@ loreport/
 | [docs/MVP.md](./docs/MVP.md) | MVP scope and sprint plan |
 | [docs/ROADMAP.md](./docs/ROADMAP.md) | Version roadmap |
 | [docs/OPENWIKI-ADAPTATION.md](./docs/OPENWIKI-ADAPTATION.md) | Porting agent logic from OpenWiki |
+| [docs/AUDIT.md](./docs/AUDIT.md) | Repo audit and cleanup backlog |
 
 ## Roadmap (summary)
 
@@ -126,4 +124,4 @@ MIT (planned). Agent logic adapted from [langchain-ai/openwiki](https://github.c
 
 ## Status
 
-**Pre-development.** Starter documentation only. Implementation not started.
+**v0.1 MVP** — standalone sidecar, agent init/update, web UI, Docker Hub image. Webhook and polling not yet implemented.

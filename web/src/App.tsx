@@ -1,4 +1,6 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { docPathFromLocation, docUrl, resolveDocLink, wireDocLinks } from "./docLinks";
+import { renderMermaidIn } from "./renderMermaid";
 
 type SyncStatus = {
   state: string;
@@ -16,7 +18,6 @@ type LanguageOption = {
 type AppSettings = {
   provider: string;
   model_id: string | null;
-  poll_interval_sec: number;
   language: string;
   languages: LanguageOption[];
 };
@@ -44,6 +45,10 @@ function formatDate(value: string | null): string | null {
   return new Date(value).toLocaleString();
 }
 
+function defaultDocPath(flat: DocTreeNode[]): string | null {
+  return flat.find((doc) => doc.path === "quickstart.md")?.path ?? flat[0]?.path ?? null;
+}
+
 export function App() {
   const [status, setStatus] = useState<SyncStatus | null>(null);
   const [settings, setSettings] = useState<AppSettings | null>(null);
@@ -53,6 +58,24 @@ export function App() {
   const [docHtml, setDocHtml] = useState<string>("");
   const [docLoading, setDocLoading] = useState(false);
   const [loading, setLoading] = useState(false);
+  const docContentRef = useRef<HTMLDivElement>(null);
+
+  const flatDocs = useMemo(() => flattenDocs(docs), [docs]);
+  const docPathSet = useMemo(() => new Set(flatDocs.map((doc) => doc.path)), [flatDocs]);
+
+  const selectDoc = useCallback((path: string, historyMode: "push" | "replace" = "push") => {
+    setSelectedPath(path);
+    const url = docUrl(path);
+    if (window.location.pathname === url) {
+      return;
+    }
+    const state = { docPath: path };
+    if (historyMode === "replace") {
+      window.history.replaceState(state, "", url);
+    } else {
+      window.history.pushState(state, "", url);
+    }
+  }, []);
 
   const loadSettings = useCallback(async () => {
     const res = await fetch("/api/settings");
@@ -71,14 +94,25 @@ export function App() {
     if (!res.ok) return;
     const tree = (await res.json()) as DocTreeNode[];
     setDocs(tree);
+
     const flat = flattenDocs(tree);
+    const paths = new Set(flat.map((doc) => doc.path));
+    const fromUrl = docPathFromLocation(window.location.pathname, paths);
+
     setSelectedPath((current) => {
-      if (current && flat.some((doc) => doc.path === current)) {
+      if (fromUrl) {
+        return fromUrl;
+      }
+      if (current && paths.has(current)) {
         return current;
       }
-      const quickstart = flat.find((doc) => doc.path === "quickstart.md");
-      return quickstart?.path ?? flat[0]?.path ?? null;
+      return defaultDocPath(flat);
     });
+
+    const resolved = fromUrl ?? defaultDocPath(flat);
+    if (resolved) {
+      window.history.replaceState({ docPath: resolved }, "", docUrl(resolved));
+    }
   }, []);
 
   const loadDocContent = useCallback(async (path: string) => {
@@ -113,10 +147,51 @@ export function App() {
   }, [loadDocs, status?.changed, status?.state]);
 
   useEffect(() => {
+    const onPopState = () => {
+      const path = docPathFromLocation(window.location.pathname, docPathSet);
+      if (path) {
+        setSelectedPath(path);
+      }
+    };
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+  }, [docPathSet]);
+
+  useEffect(() => {
     if (selectedPath) {
       void loadDocContent(selectedPath);
     }
   }, [loadDocContent, selectedPath]);
+
+  useEffect(() => {
+    const el = docContentRef.current;
+    if (!el || docLoading || !docHtml || !selectedPath) return;
+    el.innerHTML = docHtml;
+    wireDocLinks(el, selectedPath, docPathSet);
+    void renderMermaidIn(el);
+  }, [docHtml, docLoading, docPathSet, selectedPath]);
+
+  useEffect(() => {
+    const el = docContentRef.current;
+    if (!el || !selectedPath) return;
+
+    const onClick = (event: MouseEvent) => {
+      const anchor = (event.target as HTMLElement).closest("a");
+      if (!anchor || !el.contains(anchor)) return;
+
+      const href = anchor.getAttribute("href");
+      if (!href) return;
+
+      const docPath = resolveDocLink(selectedPath, href);
+      if (docPath && docPathSet.has(docPath)) {
+        event.preventDefault();
+        selectDoc(docPath);
+      }
+    };
+
+    el.addEventListener("click", onClick);
+    return () => el.removeEventListener("click", onClick);
+  }, [docPathSet, docHtml, docLoading, selectDoc, selectedPath]);
 
   async function trigger(command: "init" | "update") {
     setLoading(true);
@@ -132,7 +207,6 @@ export function App() {
     }
   }
 
-  const flatDocs = flattenDocs(docs);
   const statusLabel =
     status?.state === "running"
       ? "выполняется"
@@ -224,7 +298,7 @@ export function App() {
                   key={doc.path}
                   type="button"
                   className={doc.path === selectedPath ? "doc-link active" : "doc-link"}
-                  onClick={() => setSelectedPath(doc.path)}
+                  onClick={() => selectDoc(doc.path)}
                 >
                   {doc.name.replace(/\.md$/, "")}
                 </button>
@@ -234,10 +308,7 @@ export function App() {
               {docLoading ? (
                 <p className="muted">Загрузка…</p>
               ) : (
-                <div
-                  className="markdown-body"
-                  dangerouslySetInnerHTML={{ __html: docHtml }}
-                />
+                <div ref={docContentRef} className="markdown-body" />
               )}
             </article>
           </div>

@@ -79,9 +79,6 @@ async def run_loreport_agent(
     language: str | None = None,
 ) -> bool:
     """Run init/update agent. Returns True if lore content changed."""
-    if command == "chat":
-        raise ValueError("chat command is not supported in the sync worker")
-
     repo_path = repo_path.resolve()
     if not repo_path.is_dir():
         raise FileNotFoundError(f"Repository path not found: {repo_path}")
