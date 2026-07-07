@@ -9,6 +9,7 @@ from loreport_core.constants import (
     resolve_language,
 )
 from loreport_core.git.evidence import RunContext, UpdateMetadata
+from loreport_core.integrity import GAP_FORMAT_RULES, SHALLOW_PAGE_FORBIDDEN, format_service_task_hints
 from loreport_core.scope import RepoScope, format_service_inventory
 from loreport_core.types import LoreportCommand
 
@@ -107,7 +108,7 @@ Service page template (`{loreport_dir}/services/<name>.md`):
 - **Implementation signals** — entrypoints, main modules, configs found in code (with paths)
 - **Integrations** — named systems, queues, DBs, HTTP clients (from docs and/or code)
 - **Alignment** — items where human docs and code agree
-- **Gaps & drift** — use explicit labels:
+- **Gaps & drift** — use explicit labels with explanation (never bare labels):
   - `documented intent, not in code` — spec/README mentions it, implementation not found
   - `in code, not documented` — found in code, no human doc reference
   - `likely stale doc` — human doc conflicts with inspected code
@@ -115,15 +116,23 @@ Service page template (`{loreport_dir}/services/<name>.md`):
 - For mermaid diagrams: use quoted node labels like `A["/api/sync"]`, never parallelogram `[/path/]`
 
 Quality bar:
-- A service page is inadequate if it only lists bullets without Alignment/Gaps sections.
+- A service page is INADEQUATE if Implementation signals lacks concrete file paths from code.
+- A service page is INADEQUATE if Gaps & drift lists bare labels without explanations.
+- A service page is INADEQUATE if it says code was "not researched" — go read the code first.
+- Target depth: entrypoints, routers, services, consumers, models, config — like a full integrity pass.
+- Integrations must use a table with Evidence column (paths), not a bare name list.
 - Platform pages must show how services connect, not just what each service does in isolation.
-- Prefer honest partial coverage over confident invention.
-- Read routers, models, messaging, and config — not only README — before claiming implementation facts.
+- Prefer honest partial coverage over confident invention — but partial ≠ skipping code research.
 
-Subagent discipline:
-- You may use the task tool to parallelize read-only research during init and update runs.
-- Subagents inspect and summarize integrity notes per service. They must not write to {loreport_dir}/.
-- The main agent synthesizes final docs and is responsible for all writes.
+{GAP_FORMAT_RULES}
+
+{SHALLOW_PAGE_FORBIDDEN}
+
+Subagent output discipline:
+- Subagent notes are drafts. Do NOT copy shallow subagent output verbatim into service pages.
+- If a subagent returns doc-only notes or fewer than 5 code paths, YOU must grep/read the
+  service directory yourself before writing `{loreport_dir}/services/<name>.md`.
+- Re-dispatch `service-researcher` with the mandatory code checklist if the first pass was shallow.
 
 Planning discipline:
 - After discovery, create a temporary {loreport_dir}/_plan.md with intended pages, services inventory, and known gaps.
@@ -195,26 +204,33 @@ Run a **workflow** using the code interpreter (`eval` tool):
 
 1. Write JavaScript that loops over every service — do not skip any:
    `const services = {services_json};`
-2. Dispatch `service-researcher` from code with the built-in `task()` global:
-   `await task({{ description: "Inspect <name> at /<name>/ ...",
-   subagentType: "service-researcher" }})`
+2. Dispatch `service-researcher` from code with the built-in `task()` global.
+   Use the per-service task descriptions below — pass them verbatim in `description`.
 3. Fan out in batches of {max_parallel} via `Promise.all` until all services are covered.
-4. Call `platform-writer` once with combined notes:
-   `await task({{ description: "...", subagentType: "platform-writer" }})`
-5. Write all `{loreport_dir}/services/<name>.md`, then quickstart and platform pages yourself.
+4. Review results: if any service lacks ≥5 code paths, re-dispatch that service before writing.
+5. Call `platform-writer` once with combined notes.
+6. Write all `{loreport_dir}/services/<name>.md`, then quickstart and platform pages yourself.
+   Do not publish shallow pages — supplement weak subagent notes with your own code reads.
 
 Use the interpreter for orchestration; use filesystem tools for writes.
+
+Per-service task descriptions (use in task calls):
+{format_service_task_hints(scope)}
 """
     else:
         orchestration = f"""
 Run this workflow:
 1. For EACH service above ({names}), call the `task` tool with subagent `service-researcher`.
-   - Pass the exact service name and virtual path `/<service-name>/` in the task prompt.
-   - Run up to {max_parallel} tasks in parallel per batch until every service is covered.
-2. After all service notes are collected, call `platform-writer` once with the combined notes.
-3. Write every `{loreport_dir}/services/<name>.md` yourself using the service page template.
-4. Write `{loreport_dir}/quickstart.md` and `{loreport_dir}/platform/` from the synthesis.
-5. End quickstart with **Platform gaps**.
+   Use the per-service task descriptions below — pass them verbatim in the task prompt.
+   Run up to {max_parallel} tasks in parallel per batch until every service is covered.
+2. Review results: if any service lacks ≥5 code paths, re-dispatch or research it yourself.
+3. After all service notes are collected, call `platform-writer` once with the combined notes.
+4. Write every `{loreport_dir}/services/<name>.md` yourself using the service page template.
+5. Write `{loreport_dir}/quickstart.md` and `{loreport_dir}/platform/` from the synthesis.
+6. End quickstart with **Platform gaps**.
+
+Per-service task descriptions:
+{format_service_task_hints(scope)}
 """
 
     return f"""

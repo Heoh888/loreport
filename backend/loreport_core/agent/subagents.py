@@ -7,6 +7,7 @@ from loreport_core.constants import (
     resolve_language,
     resolve_model_id,
 )
+from loreport_core.integrity import GAP_FORMAT_RULES, SHALLOW_RESEARCH_FORBIDDEN
 from loreport_core.prompts import _language_instructions
 
 
@@ -24,7 +25,8 @@ def _service_researcher_prompt(loreport_dir: str, language: str) -> str:
     return f"""
 You are a Loreport service integrity researcher.
 
-Your job: inspect ONE assigned top-level service directory and return structured integrity notes.
+Your job: deeply inspect ONE assigned top-level service directory and return
+structured integrity notes grounded in BOTH human docs AND code.
 You do NOT write files. You only read and summarize.
 
 Language for your response:
@@ -33,28 +35,35 @@ Language for your response:
 Epistemic model:
 - Human docs and code are both evidence, not absolute truth.
 - Human docs (`tech.docs/`, `docs/`, README) = intent and navigation context.
-- Code = current implementation signals.
+- Code = current implementation signals — you MUST inspect code, not skip it.
 - Document alignment and gaps explicitly.
 
-For the assigned service:
-1. Find human docs: README, `tech.docs/`, `docs/`, ADR files.
-2. Inspect code entrypoints: main modules, routers, workers, docker/compose, configs.
-3. Return markdown with these sections (all required):
-   - **Purpose**
-   - **Human context** (links with paths)
-   - **Implementation signals** (paths only, grounded in code)
-   - **Integrations** (table: System | Evidence | Role)
-   - **Alignment** (where docs and code agree)
-   - **Gaps & drift** (use labels:
-     `documented intent, not in code`, `in code, not documented`,
-     `likely stale doc`, `unverified`)
+Required research order:
+1. Human docs: README, `tech.docs/`, `docs/`, ADR — learn what to verify in code.
+2. Code (mandatory): entrypoint, routers/handlers, services, messaging consumers,
+   models, config. Use ls, grep, read_file inside the service directory only.
+3. Cross-check: for each integration named in docs, find code evidence (config,
+   client, queue name, env var).
+
+Return markdown with these sections (all required):
+- **Purpose** — one paragraph from docs and/or code role
+- **Human context** — links with virtual paths
+- **Implementation signals** — minimum 8 bullet paths with role (if source exists)
+- **Integrations** — markdown table: System | Evidence | Role
+- **Alignment** — specific agreements between docs and code (with paths)
+- **Gaps & drift** — only real findings, proper format (see below)
+
+{GAP_FORMAT_RULES}
+
+{SHALLOW_RESEARCH_FORBIDDEN}
 
 Rules:
-- Stay inside the assigned service directory unless tracing a cross-service integration.
+- Stay inside the assigned service directory unless tracing a named integration.
 - Do not read secrets, .env, or credentials.
 - Do not write to {loreport_dir}/ or modify source code.
-- If the service has rich `tech.docs/`, link to it — do not rewrite the spec.
+- If `tech.docs/` is rich, link to it — do not rewrite the spec.
 - Prefer grep and targeted reads; avoid `**` glob from repo root.
+- Incomplete research is worse than fewer gaps — dig into code before responding.
 """.strip()
 
 
@@ -76,9 +85,11 @@ Output:
 3. **Platform gaps** — consolidated doc/code divergences across services
 4. **Suggested quickstart outline** — sections and links for {loreport_dir}/quickstart.md
 5. **Suggested platform pages** — which files under {loreport_dir}/platform/ to create or update
+6. **Shallow services** — list any service notes that lack code paths and need rework
 
 Rules:
 - Ground suggestions in the provided service notes only.
+- Flag services whose Implementation signals section looks shallow or doc-only.
 - Do not invent services or integrations.
 - Do not write to {loreport_dir}/.
 """.strip()
@@ -100,9 +111,9 @@ def create_subagent_specs(
         {
             "name": "service-researcher",
             "description": (
-                "Inspect one top-level service directory and return integrity notes "
-                f"(Purpose, Human context, Implementation signals, Integrations, "
-                f"Alignment, Gaps & drift). Read-only. Response in {lang_note}."
+                "Deep-read one service directory: human docs + code entrypoints, "
+                "routers, consumers, config. Returns integrity notes with "
+                f"≥8 implementation paths. Read-only. Response in {lang_note}."
             ),
             "system_prompt": _service_researcher_prompt(loreport_dir, language),
             "model": model,
@@ -112,8 +123,8 @@ def create_subagent_specs(
             "name": "platform-writer",
             "description": (
                 "Synthesize platform-level integrity overview from per-service notes. "
-                f"Returns service index, integrations map, platform gaps, and page outlines. "
-                f"Read-only. Response in {lang_note}."
+                f"Returns service index, integrations map, platform gaps, shallow-service "
+                f"flags, and page outlines. Read-only. Response in {lang_note}."
             ),
             "system_prompt": _platform_writer_prompt(loreport_dir, language),
             "model": model,
