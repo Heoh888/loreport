@@ -52,6 +52,11 @@ async def process_job(payload: SyncJobPayload) -> None:
             model_id=settings.loreport_model_id,
             provider=settings.loreport_provider,
             language=payload.language or settings.loreport_language,
+            workflow_enabled=settings.loreport_workflow_enabled,
+            dynamic_workflow_enabled=settings.loreport_dynamic_workflow_enabled,
+            max_parallel_subagents=settings.loreport_max_parallel_subagents,
+            subagent_model_id=settings.loreport_subagent_model_id,
+            update_max_passes=settings.loreport_update_max_passes,
         )
         logger.info("Agent finished job=%s changed=%s", job_id, changed)
     except Exception as exc:  # noqa: BLE001

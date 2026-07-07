@@ -19,6 +19,11 @@ class Settings(BaseSettings):
     openrouter_api_key: str | None = None
     loreport_language: str = "en"
     static_dir: str | None = None
+    loreport_workflow_enabled: bool = True
+    loreport_dynamic_workflow_enabled: bool = True
+    loreport_max_parallel_subagents: int = 5
+    loreport_subagent_model_id: str | None = None
+    loreport_update_max_passes: int = 3
 
     def resolved_database_url(self) -> str:
         if self.database_url:
