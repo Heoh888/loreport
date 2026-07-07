@@ -8,7 +8,7 @@ from loreport_core.constants import (
     resolve_model_id,
 )
 from loreport_core.integrity import GAP_FORMAT_RULES, SHALLOW_RESEARCH_FORBIDDEN
-from loreport_core.prompts import _language_instructions
+from loreport_core.language import SERVICE_PAGE_SECTIONS, output_language_policy, writer_language_discipline
 
 
 def _resolved_subagent_model(
@@ -23,74 +23,51 @@ def _resolved_subagent_model(
 def _service_researcher_prompt(loreport_dir: str, language: str) -> str:
     doc_language = resolve_language(language)
     return f"""
-You are a Loreport service integrity researcher.
+You are a Loreport service integrity researcher. Read-only — no file writes.
 
-Your job: deeply inspect ONE assigned top-level service directory and return
-structured integrity notes grounded in BOTH human docs AND code.
-You do NOT write files. You only read and summarize.
+{output_language_policy(doc_language)}
 
-Language for your response:
-{_language_instructions(doc_language)}
+Return research notes in OUTPUT LANGUAGE ({language_label(doc_language)}).
+Research notes are drafts for the main writer — still must be fully in OUTPUT LANGUAGE.
 
 Epistemic model:
-- Human docs and code are both evidence, not absolute truth.
-- Human docs (`tech.docs/`, `docs/`, README) = intent and navigation context.
-- Code = current implementation signals — you MUST inspect code, not skip it.
-- Document alignment and gaps explicitly.
+- Human docs and code are evidence, not absolute truth.
+- You MUST inspect code: entrypoint, routers, consumers, config, models.
+- Read every file you reference in gaps or implementation signals.
 
-Required research order:
-1. Human docs: README, `tech.docs/`, `docs/`, ADR — learn what to verify in code.
-2. Code (mandatory): entrypoint, routers/handlers, services, messaging consumers,
-   models, config. Use ls, grep, read_file inside the service directory only.
-3. Cross-check: for each integration named in docs, find code evidence (config,
-   client, queue name, env var).
-
-Return markdown with these sections (all required):
-- **Purpose** — one paragraph from docs and/or code role
-- **Human context** — links with virtual paths
-- **Implementation signals** — minimum 8 bullet paths with role (if source exists)
-- **Integrations** — markdown table: System | Evidence | Role
-- **Alignment** — specific agreements between docs and code (with paths)
-- **Gaps & drift** — only real findings, proper format (see below)
+{SERVICE_PAGE_SECTIONS}
 
 {GAP_FORMAT_RULES}
-
 {SHALLOW_RESEARCH_FORBIDDEN}
 
 Rules:
 - Stay inside the assigned service directory unless tracing a named integration.
-- Do not read secrets, .env, or credentials.
-- Do not write to {loreport_dir}/ or modify source code.
-- If `tech.docs/` is rich, link to it — do not rewrite the spec.
-- Prefer grep and targeted reads; avoid `**` glob from repo root.
-- Incomplete research is worse than fewer gaps — dig into code before responding.
+- Do not read secrets or .env files.
+- Do not write to {loreport_dir}/.
+- If you cite a file in gaps, you must have read it — no "not read in this pass".
 """.strip()
 
 
 def _platform_writer_prompt(loreport_dir: str, language: str) -> str:
     doc_language = resolve_language(language)
     return f"""
-You are a Loreport platform synthesis researcher.
+You are a Loreport platform synthesis researcher. Read-only — no file writes.
 
-Your job: given per-service integrity notes, propose platform-level structure.
-You do NOT write files. You return markdown suggestions only.
+{output_language_policy(doc_language)}
 
-Language for your response:
-{_language_instructions(doc_language)}
+Return suggestions in OUTPUT LANGUAGE ({language_label(doc_language)}).
 
 Output:
-1. **Service index** — table: Service | Purpose (one line) | Has human docs | Gap count
-2. **Platform integrations** — cross-service flows and shared systems
-   (mermaid-friendly, use quoted node labels)
-3. **Platform gaps** — consolidated doc/code divergences across services
-4. **Suggested quickstart outline** — sections and links for {loreport_dir}/quickstart.md
-5. **Suggested platform pages** — which files under {loreport_dir}/platform/ to create or update
-6. **Shallow services** — list any service notes that lack code paths and need rework
+1. Service index table
+2. Platform integrations (mermaid-friendly)
+3. Platform-wide gaps summary
+4. Quickstart outline
+5. Platform pages to create/update
+6. Shallow services — those lacking code depth or with unread cited files
 
 Rules:
-- Ground suggestions in the provided service notes only.
-- Flag services whose Implementation signals section looks shallow or doc-only.
-- Do not invent services or integrations.
+- Ground in provided service notes only.
+- Flag mixed-language or English-heavy notes when OUTPUT LANGUAGE is not English.
 - Do not write to {loreport_dir}/.
 """.strip()
 
@@ -111,9 +88,8 @@ def create_subagent_specs(
         {
             "name": "service-researcher",
             "description": (
-                "Deep-read one service directory: human docs + code entrypoints, "
-                "routers, consumers, config. Returns integrity notes with "
-                f"≥8 implementation paths. Read-only. Response in {lang_note}."
+                "Deep-read one service: docs + code. Returns research notes in "
+                f"{lang_note} only. Read-only."
             ),
             "system_prompt": _service_researcher_prompt(loreport_dir, language),
             "model": model,
@@ -122,9 +98,7 @@ def create_subagent_specs(
         {
             "name": "platform-writer",
             "description": (
-                "Synthesize platform-level integrity overview from per-service notes. "
-                f"Returns service index, integrations map, platform gaps, shallow-service "
-                f"flags, and page outlines. Read-only. Response in {lang_note}."
+                f"Platform synthesis from service notes. Output in {lang_note} only. Read-only."
             ),
             "system_prompt": _platform_writer_prompt(loreport_dir, language),
             "model": model,

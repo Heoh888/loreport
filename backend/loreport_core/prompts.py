@@ -10,6 +10,11 @@ from loreport_core.constants import (
 )
 from loreport_core.git.evidence import RunContext, UpdateMetadata
 from loreport_core.integrity import GAP_FORMAT_RULES, SHALLOW_PAGE_FORBIDDEN, format_service_task_hints
+from loreport_core.language import (
+    SERVICE_PAGE_SECTIONS,
+    output_language_policy,
+    writer_language_discipline,
+)
 from loreport_core.scope import RepoScope, format_service_inventory
 from loreport_core.types import LoreportCommand
 
@@ -37,15 +42,7 @@ def _format_last_update(last_update: UpdateMetadata | None) -> str:
 
 
 def _language_instructions(language: str) -> str:
-    label = language_label(language)
-    if language == "en":
-        return "- Write all Loreport pages in English."
-    return f"""
-- Write all Loreport pages in {label} ({language}).
-- Use clear, natural {label} for headings, prose, and link text.
-- Keep code identifiers, file paths, env var names, and API routes in their original form.
-- Translate explanations and summaries; do not leave the wiki in English unless quoting source text.
-""".strip()
+    return output_language_policy(language)
 
 
 def create_system_prompt(
@@ -55,15 +52,18 @@ def create_system_prompt(
     language: str | None = None,
 ) -> str:
     doc_language = resolve_language(language)
+    lang_policy = output_language_policy(doc_language)
+    writer_rules = writer_language_discipline(doc_language)
     return f"""
 You are Loreport, an expert software analyst and technical writer.
+
+{lang_policy}
+
+{writer_rules}
 
 Your job is to maintain **project integrity** in the {loreport_dir}/ directory: a living map that helps architects and engineers navigate the repository, connect services, and see where human intent, implementation, and documentation align or diverge.
 
 You are NOT replacing architects or team-authored specs. You give them a reliable sidecar view of the whole system.
-
-Language:
-{_language_instructions(doc_language)}
 
 Epistemic model (critical):
 - Neither human docs nor source code is absolute truth. Both are evidence.
@@ -103,36 +103,25 @@ Monorepo discipline:
 - Every discovered top-level service must appear in quickstart. Do not skip services silently.
 
 Service page template (`{loreport_dir}/services/<name>.md`):
-- **Purpose** — one paragraph from human docs and/or code role
-- **Human context** — links to README, `tech.docs/`, ADR (what to read for intent)
-- **Implementation signals** — entrypoints, main modules, configs found in code (with paths)
-- **Integrations** — named systems, queues, DBs, HTTP clients (from docs and/or code)
-- **Alignment** — items where human docs and code agree
-- **Gaps & drift** — use explicit labels with explanation (never bare labels):
-  - `documented intent, not in code` — spec/README mentions it, implementation not found
-  - `in code, not documented` — found in code, no human doc reference
-  - `likely stale doc` — human doc conflicts with inspected code
-  - `unverified` — could not confirm from available evidence
+{SERVICE_PAGE_SECTIONS}
 - For mermaid diagrams: use quoted node labels like `A["/api/sync"]`, never parallelogram `[/path/]`
 
 Quality bar:
 - A service page is INADEQUATE if Implementation signals lacks concrete file paths from code.
-- A service page is INADEQUATE if Gaps & drift lists bare labels without explanations.
-- A service page is INADEQUATE if it says code was "not researched" — go read the code first.
-- Target depth: entrypoints, routers, services, consumers, models, config — like a full integrity pass.
-- Integrations must use a table with Evidence column (paths), not a bare name list.
+- A service page is INADEQUATE if Gaps & drift lists bare labels or "not read in this pass" excuses.
+- A service page is INADEQUATE if ANY section is in the wrong language — rewrite the whole page.
+- If you cite a file in gaps, you must have read it in this run.
+- Integrations must be a table with evidence paths, not a bare name list.
 - Platform pages must show how services connect, not just what each service does in isolation.
-- Prefer honest partial coverage over confident invention — but partial ≠ skipping code research.
 
 {GAP_FORMAT_RULES}
 
 {SHALLOW_PAGE_FORBIDDEN}
 
 Subagent output discipline:
-- Subagent notes are drafts. Do NOT copy shallow subagent output verbatim into service pages.
-- If a subagent returns doc-only notes or fewer than 5 code paths, YOU must grep/read the
-  service directory yourself before writing `{loreport_dir}/services/<name>.md`.
-- Re-dispatch `service-researcher` with the mandatory code checklist if the first pass was shallow.
+- Subagent notes are raw research. Rewrite every sentence into OUTPUT LANGUAGE before write_file.
+- If notes are shallow, doc-only, or mixed-language: re-research the service yourself, then write.
+- Never publish Alignment/Gaps paragraphs copied from English subagent output when OUTPUT LANGUAGE is not English.
 
 Planning discipline:
 - After discovery, create a temporary {loreport_dir}/_plan.md with intended pages, services inventory, and known gaps.
@@ -161,29 +150,28 @@ Required structure:
 - Track the last successful documentation update in {UPDATE_METADATA_PATH}.
 
 Mode-specific behavior:
-{_mode_instructions(command, loreport_dir)}
+{_mode_instructions(command, loreport_dir, doc_language)}
 """.strip()
 
 
-def _mode_instructions(command: LoreportCommand, loreport_dir: str) -> str:
+def _mode_instructions(command: LoreportCommand, loreport_dir: str, language: str) -> str:
+    label = language_label(resolve_language(language))
     if command == "init":
         return f"""
 - This is an initial documentation run.
 - Build the integrity map from scratch under {loreport_dir}/.
 - Step 1: inventory all top-level services and every `tech.docs/` / README tree.
-- Step 2: for EACH service, create `{loreport_dir}/services/<name>.md` using the service page template (Alignment + Gaps required).
-- Step 3: synthesize `{loreport_dir}/quickstart.md` and `{loreport_dir}/platform/` from the per-service integrity notes.
-- Services with rich human docs: link prominently, add cross-service context and drift notes — do not rewrite their specs.
-- Services without human docs: research code entrypoints and write a fuller integrity page.
-- End quickstart with a **Platform gaps** section listing undocumented services and known doc/code divergences.
+- Step 2: for EACH service, create `{loreport_dir}/services/<name>.md` (all sections in {label}).
+- Step 3: synthesize `{loreport_dir}/quickstart.md` and `{loreport_dir}/platform/`.
+- End quickstart with a platform-wide gaps section (heading in {label}).
 - Use up to 12 pages for monorepos; up to 8 for small single-service repositories.
 """.strip()
     return f"""
 - This is a maintenance update run.
-- Inspect existing {loreport_dir}/ documentation before editing.
+- Read existing `{loreport_dir}/` pages before editing (read_file each affected .md).
 - Use git diff and last update metadata to find affected services and files.
-- Update only pages whose integrity notes are stale. Keep edits surgical.
-- Re-check Alignment/Gaps sections for affected services.
+- Rewrite edited pages entirely in {label} — fix mixed-language pages you touch.
+- If a page mixes languages, translate the full page to {label}, not only changed lines.
 - Updates may be a no-op. If integrity is already current, do not edit files.
 """.strip()
 
@@ -194,9 +182,11 @@ def _workflow_init_block(
     *,
     max_parallel: int,
     dynamic_workflow: bool = False,
+    language: str | None = None,
 ) -> str:
     names = ", ".join(scope.service_names)
     services_json = json.dumps(list(scope.service_names))
+    task_hints = format_service_task_hints(scope, language=language)
 
     if dynamic_workflow:
         orchestration = f"""
@@ -209,13 +199,13 @@ Run a **workflow** using the code interpreter (`eval` tool):
 3. Fan out in batches of {max_parallel} via `Promise.all` until all services are covered.
 4. Review results: if any service lacks ≥5 code paths, re-dispatch that service before writing.
 5. Call `platform-writer` once with combined notes.
-6. Write all `{loreport_dir}/services/<name>.md`, then quickstart and platform pages yourself.
-   Do not publish shallow pages — supplement weak subagent notes with your own code reads.
+6. Write all `{loreport_dir}/services/<name>.md` in OUTPUT LANGUAGE, then quickstart and platform.
+   Rewrite subagent notes — do not copy English Alignment/Gaps paragraphs verbatim.
 
 Use the interpreter for orchestration; use filesystem tools for writes.
 
 Per-service task descriptions (use in task calls):
-{format_service_task_hints(scope)}
+{task_hints}
 """
     else:
         orchestration = f"""
@@ -225,12 +215,12 @@ Run this workflow:
    Run up to {max_parallel} tasks in parallel per batch until every service is covered.
 2. Review results: if any service lacks ≥5 code paths, re-dispatch or research it yourself.
 3. After all service notes are collected, call `platform-writer` once with the combined notes.
-4. Write every `{loreport_dir}/services/<name>.md` yourself using the service page template.
+4. Write every `{loreport_dir}/services/<name>.md` in OUTPUT LANGUAGE — rewrite subagent notes.
 5. Write `{loreport_dir}/quickstart.md` and `{loreport_dir}/platform/` from the synthesis.
-6. End quickstart with **Platform gaps**.
+6. End quickstart with platform-wide gaps section (in OUTPUT LANGUAGE).
 
 Per-service task descriptions:
-{format_service_task_hints(scope)}
+{task_hints}
 """
 
     return f"""
@@ -250,6 +240,7 @@ def _workflow_update_block(
     max_parallel: int,
     update_max_passes: int,
     dynamic_workflow: bool = False,
+    language: str | None = None,
 ) -> str:
     names = ", ".join(affected_services)
     services_json = json.dumps(list(affected_services))
@@ -262,7 +253,7 @@ Run a **workflow** using the code interpreter (`eval` tool):
 2. Loop or batch with `Promise.all` (max {max_parallel} parallel) and dispatch each via:
    `await task({{ description: "...", subagentType: "service-researcher" }})`
 3. Update only affected `{loreport_dir}/services/<name>.md` pages.
-4. Refresh platform pages and quickstart **Platform gaps** if integrations changed.
+4. Refresh platform pages and quickstart gaps section if integrations changed.
 5. Up to {update_max_passes} passes if cross-cutting impact is found.
 """
     else:
@@ -271,8 +262,7 @@ Run this workflow:
 1. For EACH affected service, call `task` with subagent `service-researcher`
    (up to {max_parallel} parallel).
 2. Update only `{loreport_dir}/services/<name>.md` for affected services.
-3. Refresh platform pages and quickstart **Platform gaps**
-   if cross-service integrations changed.
+3. Refresh platform pages and quickstart gaps section if cross-service integrations changed.
 4. Loop up to {update_max_passes} passes if a subagent reports cross-cutting impact
    beyond the initial list.
 """
@@ -301,7 +291,11 @@ def create_user_prompt(
     update_max_passes: int = 3,
 ) -> str:
     doc_language = resolve_language(language)
-    lang_note = f"\nDocumentation language: {language_label(doc_language)} ({doc_language})."
+    lang_policy = output_language_policy(doc_language)
+    lang_note = (
+        f"\n{lang_policy}"
+        f"\n{writer_language_discipline(doc_language)}"
+    )
     if command == "init":
         prompt = f"""
 Initialize Loreport integrity documentation for this repository.
@@ -313,7 +307,7 @@ Start with per-service integrity pages, then synthesize {loreport_dir}/quickstar
 Integrity requirements:
 - Neither human docs nor code is absolute truth. Document both and mark gaps explicitly.
 - Use team-authored docs (`tech.docs/`, README) to know what to inspect — not as infallible spec.
-- Every top-level service gets a `{loreport_dir}/services/<name>.md` page with Alignment and Gaps sections.
+- Every top-level service gets a `{loreport_dir}/services/<name>.md` page — fully in OUTPUT LANGUAGE.
 - Link to existing human docs instead of rewriting them.
 - Platform quickstart must list every service and summarize platform-wide gaps.
 
@@ -324,10 +318,10 @@ Git context:
         prompt = f"""
 Update the Loreport integrity map for this repository.
 
-Inspect {loreport_dir}/, identify recent changes from git, and refresh affected integrity pages.
-Re-check Alignment/Gaps for changed services.
+Read each affected `{loreport_dir}/services/*.md` with read_file before editing.
+Identify recent changes from git and refresh affected integrity pages.
+Fix mixed-language pages you touch — rewrite the full page in OUTPUT LANGUAGE.
 If the map is already current, do not edit files.{lang_note}
-When editing, keep the existing documentation language unless the user asks to switch languages.
 
 Last update metadata:
 {_format_last_update(context.last_update)}
@@ -345,6 +339,7 @@ Git change summary:
             scope,
             max_parallel=max_parallel_subagents,
             dynamic_workflow=dynamic_workflow,
+            language=doc_language,
         )
     elif workflow_enabled and affected_services and command == "update":
         prompt += "\n\n" + _workflow_update_block(
@@ -353,6 +348,7 @@ Git change summary:
             max_parallel=max_parallel_subagents,
             update_max_passes=update_max_passes,
             dynamic_workflow=dynamic_workflow,
+            language=doc_language,
         )
     elif scope and scope.services:
         prompt += f"\n\nPre-discovered services:\n{format_service_inventory(scope)}"
