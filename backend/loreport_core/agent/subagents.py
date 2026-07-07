@@ -8,7 +8,10 @@ from loreport_core.constants import (
     resolve_model_id,
 )
 from loreport_core.integrity import GAP_FORMAT_RULES, SHALLOW_RESEARCH_FORBIDDEN
-from loreport_core.language import SERVICE_PAGE_SECTIONS, output_language_policy, writer_language_discipline
+from loreport_core.language import (
+    SERVICE_PAGE_SECTIONS,
+    output_language_policy,
+)
 
 
 def _resolved_subagent_model(
@@ -40,6 +43,13 @@ Epistemic model:
 {GAP_FORMAT_RULES}
 {SHALLOW_RESEARCH_FORBIDDEN}
 
+When called from eval workflow with responseSchema, also return:
+- serviceName — assigned service name
+- implementationPathCount — honest count of code paths listed
+- shallow — true if doc-only, < 5 paths, or "not read in this pass" phrasing
+- markdownNotes — full research text in OUTPUT LANGUAGE
+- gapCount — number of gap items documented
+
 Rules:
 - Stay inside the assigned service directory unless tracing a named integration.
 - Do not read secrets or .env files.
@@ -64,6 +74,10 @@ Output:
 4. Quickstart outline
 5. Platform pages to create/update
 6. Shallow services — those lacking code depth or with unread cited files
+
+When called from eval workflow with responseSchema, return:
+- markdownSynthesis — platform synthesis in OUTPUT LANGUAGE
+- shallowServices — service names that lack code depth
 
 Rules:
 - Ground in provided service notes only.

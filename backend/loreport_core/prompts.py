@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import json
-
 from loreport_core.constants import (
     LOREPORT_DIR,
     UPDATE_METADATA_PATH,
@@ -17,6 +15,11 @@ from loreport_core.language import (
 )
 from loreport_core.scope import RepoScope, format_service_inventory
 from loreport_core.types import LoreportCommand
+from loreport_core.workflow import (
+    build_map_reduce_init_script,
+    build_map_reduce_update_script,
+    format_eval_workflow_block,
+)
 
 AGENTS_MD_SECTION = f"""## Loreport
 
@@ -185,28 +188,20 @@ def _workflow_init_block(
     language: str | None = None,
 ) -> str:
     names = ", ".join(scope.service_names)
-    services_json = json.dumps(list(scope.service_names))
     task_hints = format_service_task_hints(scope, language=language)
 
     if dynamic_workflow:
-        orchestration = f"""
-Run a **workflow** using the code interpreter (`eval` tool):
-
-1. Write JavaScript that loops over every service — do not skip any:
-   `const services = {services_json};`
-2. Dispatch `service-researcher` from code with the built-in `task()` global.
-   Use the per-service task descriptions below — pass them verbatim in `description`.
-3. Fan out in batches of {max_parallel} via `Promise.all` until all services are covered.
-4. Review results: if any service lacks ≥5 code paths, re-dispatch that service before writing.
-5. Call `platform-writer` once with combined notes.
-6. Write all `{loreport_dir}/services/<name>.md` in OUTPUT LANGUAGE, then quickstart and platform.
-   Rewrite subagent notes — do not copy English Alignment/Gaps paragraphs verbatim.
-
-Use the interpreter for orchestration; use filesystem tools for writes.
-
-Per-service task descriptions (use in task calls):
-{task_hints}
-"""
+        script = build_map_reduce_init_script(
+            scope,
+            language=language,
+            max_parallel=max_parallel,
+        )
+        orchestration = format_eval_workflow_block(
+            command="init",
+            script=script,
+            loreport_dir=loreport_dir,
+            language=language,
+        )
     else:
         orchestration = f"""
 Run this workflow:
@@ -235,6 +230,7 @@ Subagents are read-only researchers. You own all writes to {loreport_dir}/.
 
 def _workflow_update_block(
     loreport_dir: str,
+    scope: RepoScope,
     affected_services: tuple[str, ...],
     *,
     max_parallel: int,
@@ -243,19 +239,21 @@ def _workflow_update_block(
     language: str | None = None,
 ) -> str:
     names = ", ".join(affected_services)
-    services_json = json.dumps(list(affected_services))
 
     if dynamic_workflow:
-        orchestration = f"""
-Run a **workflow** using the code interpreter (`eval` tool):
-
-1. `const services = {services_json};`
-2. Loop or batch with `Promise.all` (max {max_parallel} parallel) and dispatch each via:
-   `await task({{ description: "...", subagentType: "service-researcher" }})`
-3. Update only affected `{loreport_dir}/services/<name>.md` pages.
-4. Refresh platform pages and quickstart gaps section if integrations changed.
-5. Up to {update_max_passes} passes if cross-cutting impact is found.
-"""
+        script = build_map_reduce_update_script(
+            scope,
+            affected_services,
+            language=language,
+            max_parallel=max_parallel,
+            max_passes=update_max_passes,
+        )
+        orchestration = format_eval_workflow_block(
+            command="update",
+            script=script,
+            loreport_dir=loreport_dir,
+            language=language,
+        )
     else:
         orchestration = f"""
 Run this workflow:
@@ -341,9 +339,10 @@ Git change summary:
             dynamic_workflow=dynamic_workflow,
             language=doc_language,
         )
-    elif workflow_enabled and affected_services and command == "update":
+    elif workflow_enabled and scope and affected_services and command == "update":
         prompt += "\n\n" + _workflow_update_block(
             loreport_dir,
+            scope,
             affected_services,
             max_parallel=max_parallel_subagents,
             update_max_passes=update_max_passes,
