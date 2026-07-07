@@ -1,6 +1,6 @@
 [project]
 name = "loreport"
-version = "0.1.7"
+version = "0.1.8"
 description = "Sidecar service for living engineering lore"
 readme = "README.md"
 requires-python = ">=3.11"

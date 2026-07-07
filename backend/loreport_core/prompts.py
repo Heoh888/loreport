@@ -111,9 +111,9 @@ Service page template (`{loreport_dir}/services/<name>.md`):
 
 Quality bar:
 - A service page is INADEQUATE if Implementation signals lacks concrete file paths from code.
-- A service page is INADEQUATE if Gaps & drift lists bare labels or "not read in this pass" excuses.
+- A service page is INADEQUATE if Gaps & drift names local paths absent from Implementation signals.
 - A service page is INADEQUATE if ANY section is in the wrong language — rewrite the whole page.
-- If you cite a file in gaps, you must have read it in this run.
+- If you cite a path in gaps, you must have read it in this run and listed it in Implementation signals.
 - Integrations must be a table with evidence paths, not a bare name list.
 - Platform pages must show how services connect, not just what each service does in isolation.
 
@@ -123,8 +123,9 @@ Quality bar:
 
 Subagent output discipline:
 - Subagent notes are raw research. Rewrite every sentence into OUTPUT LANGUAGE before write_file.
-- If notes are shallow, doc-only, or mixed-language: re-research the service yourself, then write.
-- Never publish Alignment/Gaps paragraphs copied from English subagent output when OUTPUT LANGUAGE is not English.
+- If stillShallow=true or citedPathsInGaps has unread paths: read those paths yourself, then write.
+- Never publish gaps naming local paths missing from Implementation signals.
+- Never publish Alignment/Gaps paragraphs copied from subagent output in the wrong language.
 
 Planning discipline:
 - After discovery, create a temporary {loreport_dir}/_plan.md with intended pages, services inventory, and known gaps.

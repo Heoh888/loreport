@@ -45,8 +45,10 @@ Epistemic model:
 
 When called from eval workflow with responseSchema, also return:
 - serviceName — assigned service name
-- implementationPathCount — honest count of code paths listed
-- shallow — true if doc-only, < 5 paths, or "not read in this pass" phrasing
+- implementationPathCount — count of paths in readPathsInImplementation
+- readPathsInImplementation — repo-relative paths opened and listed
+- citedPathsInGaps — repo-relative local paths named in gap items
+- shallow — true if path count too low or citedPathsInGaps has unread paths
 - markdownNotes — full research text in OUTPUT LANGUAGE
 - gapCount — number of gap items documented
 
@@ -54,7 +56,7 @@ Rules:
 - Stay inside the assigned service directory unless tracing a named integration.
 - Do not read secrets or .env files.
 - Do not write to {loreport_dir}/.
-- If you cite a file in gaps, you must have read it — no "not read in this pass".
+- citedPathsInGaps must be a subset of readPathsInImplementation.
 """.strip()
 
 

@@ -10,26 +10,50 @@ Gaps & drift format (strict):
 - NEVER placeholder lists of all categories
 - Omit categories with no real finding
 - Gap explanations must be in OUTPUT LANGUAGE
+- Every local path named in a gap MUST also appear in Implementation signals
+- NEVER use a gap to record that a local file was skipped — read it or omit the gap
+- Category "could not verify" is ONLY for external/uninspectable systems —
+  never for local source files
 """.strip()
 
 SHALLOW_PAGE_FORBIDDEN = """
 FORBIDDEN on published service pages:
-- "not researched", "not verified in this pass", "not read in this pass", "not explored"
-- "inferred mostly from", "partially grounded", "only partially"
+- Gaps naming local paths absent from Implementation signals
+- Gaps whose purpose is to excuse missing code inspection instead of stating a finding
 - Implementation signals with fewer than 5 concrete file paths (when source exists)
 - Bare gap labels without explanation
 - Integrations as bullets without evidence paths
-- Any English prose when OUTPUT LANGUAGE is not English
+- Prose in a language other than OUTPUT LANGUAGE
 """.strip()
 
 SHALLOW_RESEARCH_FORBIDDEN = """
 FORBIDDEN in research output:
-- "not researched", "not verified in this pass", "not read in this pass"
-- "inferred mostly from", "partially grounded"
+- citedPathsInGaps containing paths not listed in readPathsInImplementation
 - Empty Implementation signals section
 - Fewer than 5 code paths when the service has source code
-- Listing files in Implementation signals without having read routers/models when claiming gaps about them
+- Doc-only research when source code exists
 """.strip()
+
+
+def normalize_repo_path(path: str) -> str:
+    return path.strip().strip("`").lstrip("/").lower()
+
+
+def has_unread_gap_citations(
+    read_paths: list[str],
+    cited_paths: list[str],
+) -> bool:
+    read_set = {normalize_repo_path(path) for path in read_paths if path.strip()}
+    for cited in cited_paths:
+        norm = normalize_repo_path(cited)
+        if not norm:
+            continue
+        if norm in read_set:
+            continue
+        if any(read_path.startswith(norm) or norm.startswith(read_path) for read_path in read_set):
+            continue
+        return True
+    return False
 
 
 def build_service_research_task(service: ServiceScope, *, language: str | None = None) -> str:
@@ -51,10 +75,11 @@ Mandatory code research:
 3. `grep` routers/handlers/consumers in `/{service.name}/`
 4. Config module
 5. Messaging layer if present
-6. models/schemas — READ files you cite in gaps (do not list paths you did not open)
+6. models/schemas — open every file you cite in gaps
 
 Return research notes with all six sections from the service page structure.
 Min 8 implementation paths. Integrations table with evidence paths.
+Every path in Gaps & drift must also be in Implementation signals.
 
 {GAP_FORMAT_RULES}
 {SHALLOW_RESEARCH_FORBIDDEN}
@@ -90,7 +115,7 @@ def format_service_task_hints(
         ],
         "",
         "Require: ls, entrypoint, grep, config, messaging, read models if cited.",
-        "Min 8 code paths. Read every file mentioned in gaps.",
+        "Min 8 code paths. citedPathsInGaps must be subset of readPathsInImplementation.",
         "",
         GAP_FORMAT_RULES,
         SHALLOW_RESEARCH_FORBIDDEN,

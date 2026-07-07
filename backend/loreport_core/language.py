@@ -15,7 +15,8 @@ Gap categories (translate labels into OUTPUT LANGUAGE, keep semantic meaning):
 - documented intent exists but not found in inspected code
 - found in code but not referenced in human docs
 - human doc likely conflicts with inspected code
-- could not verify from available evidence
+- could not verify from available evidence — ONLY external/uninspectable systems;
+  NEVER for local files you can read with tools
 """.strip()
 
 
@@ -32,10 +33,10 @@ Only keep as-is: file paths, directory names, env vars, API route strings, code 
 and short literal quotes from source files.
 
 Forbidden in loreport/*.md:
-- English (or any other) sentences when OUTPUT LANGUAGE is {code}
-- Mixed-language pages (e.g. Russian Purpose + English Alignment)
+- Prose in a language other than OUTPUT LANGUAGE ({code})
+- Mixed-language pages
 - Copying subagent/task research notes verbatim — rewrite into {label} first
-- Phrases like "not read in this pass", "inferred from structure", "partially grounded"
+- Gaps naming local paths absent from Implementation signals
 """.strip()
 
 

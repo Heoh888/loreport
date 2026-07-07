@@ -16,7 +16,20 @@ SERVICE_RESEARCH_SCHEMA: dict[str, object] = {
         },
         "shallow": {
             "type": "boolean",
-            "description": "True if research is doc-only or has excuses like not read in this pass",
+            "description": (
+                "True if doc-only, path count too low, "
+                "or citedPathsInGaps contains unread local paths"
+            ),
+        },
+        "readPathsInImplementation": {
+            "type": "array",
+            "items": {"type": "string"},
+            "description": "Repo-relative paths opened and listed in Implementation signals",
+        },
+        "citedPathsInGaps": {
+            "type": "array",
+            "items": {"type": "string"},
+            "description": "Repo-relative local paths named in Gaps & drift items",
         },
         "markdownNotes": {
             "type": "string",
@@ -24,7 +37,14 @@ SERVICE_RESEARCH_SCHEMA: dict[str, object] = {
         },
         "gapCount": {"type": "number"},
     },
-    "required": ["serviceName", "implementationPathCount", "shallow", "markdownNotes"],
+    "required": [
+        "serviceName",
+        "implementationPathCount",
+        "shallow",
+        "markdownNotes",
+        "readPathsInImplementation",
+        "citedPathsInGaps",
+    ],
 }
 
 PLATFORM_WRITER_SCHEMA: dict[str, object] = {
@@ -43,7 +63,32 @@ PLATFORM_WRITER_SCHEMA: dict[str, object] = {
 }
 
 MIN_IMPLEMENTATION_PATHS = 5
-MAX_SERVICE_RETRIES = 2
+MAX_SERVICE_RETRIES = 3
+
+_SHALLOW_JS_HELPERS = """
+function normalizePath(path) {{
+  return (path || "").replace(/^`+|`+$/g, "").replace(/^\\//, "").toLowerCase();
+}}
+
+function pathIsCovered(cited, readSet) {{
+  const norm = normalizePath(cited);
+  if (!norm) return true;
+  if (readSet.has(norm)) return true;
+  for (const readPath of readSet) {{
+    if (readPath.startsWith(norm) || norm.startsWith(readPath)) return true;
+  }}
+  return false;
+}}
+
+function resultIsShallow(result) {{
+  const readPaths = result?.readPathsInImplementation ?? [];
+  const citedPaths = result?.citedPathsInGaps ?? [];
+  const readSet = new Set(readPaths.map(normalizePath));
+  const unreadCited = citedPaths.filter((path) => !pathIsCovered(path, readSet));
+  const paths = result?.implementationPathCount ?? readPaths.length;
+  return result?.shallow === true || paths < MIN_PATHS || unreadCited.length > 0;
+}}
+""".strip()
 
 
 def _service_meta(service: ServiceScope) -> dict[str, object]:
@@ -84,7 +129,7 @@ def build_service_task_description(
         f"Return full integrity notes in {label}. "
         f"Count implementation paths honestly. "
         f"Set shallow=true if < {MIN_IMPLEMENTATION_PATHS} paths "
-        f"or if you used phrases like 'not read in this pass'."
+        f"or citedPathsInGaps lists paths absent from readPathsInImplementation."
     )
 
 
@@ -106,9 +151,12 @@ def build_map_reduce_init_script(
         for name in services
     }
     lang_code = resolve_language(language)
+    shallow_helpers = _SHALLOW_JS_HELPERS
 
     return f"""
 // Loreport map-reduce init workflow — execute verbatim via eval
+{shallow_helpers}
+
 const services = {json.dumps(services, ensure_ascii=False)};
 const serviceMeta = {json.dumps(meta, ensure_ascii=False)};
 const taskDescriptions = {json.dumps(descriptions, ensure_ascii=False)};
@@ -141,11 +189,9 @@ async function researchOne(name) {{
       label: name,
       responseSchema: researchSchema,
     }});
-    const paths = last?.implementationPathCount ?? 0;
-    const shallow = last?.shallow === true;
-    if (paths >= MIN_PATHS && !shallow) break;
+    if (!resultIsShallow(last)) break;
   }}
-  return {{ service: name, meta, ...last }};
+  return {{ service: name, meta, ...last, stillShallow: resultIsShallow(last) }};
 }}
 
 const results = [];
@@ -156,7 +202,7 @@ for (let i = 0; i < services.length; i += BATCH_SIZE) {{
 }}
 
 const shallowServices = results
-  .filter((r) => (r.implementationPathCount ?? 0) < MIN_PATHS || r.shallow === true)
+  .filter((r) => r.stillShallow === true)
   .map((r) => r.service);
 
 const platform = await task({{
@@ -206,9 +252,12 @@ def build_map_reduce_update_script(
         for name in filtered
     }
     lang_code = resolve_language(language)
+    shallow_helpers = _SHALLOW_JS_HELPERS
 
     return f"""
 // Loreport targeted update workflow — execute verbatim via eval
+{shallow_helpers}
+
 const services = {json.dumps(filtered, ensure_ascii=False)};
 const serviceMeta = {json.dumps(meta, ensure_ascii=False)};
 const taskDescriptions = {json.dumps(descriptions, ensure_ascii=False)};
@@ -230,16 +279,15 @@ async function researchOne(name) {{
       label: name,
       responseSchema: researchSchema,
     }});
-    const paths = last?.implementationPathCount ?? 0;
-    if (paths >= MIN_PATHS && last?.shallow !== true) break;
+    if (!resultIsShallow(last)) break;
   }}
-  return {{ service: name, ...last }};
+  return {{ service: name, ...last, stillShallow: resultIsShallow(last) }};
 }}
 
 let results = [];
 for (let pass = 0; pass < MAX_PASSES; pass++) {{
   const pending = pass === 0 ? services : results
-    .filter((r) => (r.implementationPathCount ?? 0) < MIN_PATHS || r.shallow === true)
+    .filter((r) => r.stillShallow === true)
     .map((r) => r.service);
   if (pending.length === 0) break;
   const passResults = [];
@@ -278,6 +326,11 @@ def format_eval_workflow_block(
         if command == "init"
         else "Update only affected loreport/services/*.md from results[].markdownNotes."
     )
+    shallow_rule = (
+        "5. For services in shallowServices or with stillShallow=true: BEFORE write_file, "
+        "read entrypoint, routers, and every path in citedPathsInGaps (read_file/grep). "
+        "Every local path in Gaps & drift must also appear in Implementation signals."
+    )
     return f"""
 Deterministic workflow (Eval map-reduce):
 
@@ -285,6 +338,7 @@ Deterministic workflow (Eval map-reduce):
 2. Do NOT write your own orchestration loop; the script already covers batches and retries.
 3. {action}
 4. Rewrite all prose into OUTPUT LANGUAGE before write_file — never paste markdownNotes verbatim.
+{shallow_rule}
 
 {lang_policy}
 
