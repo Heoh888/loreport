@@ -8,7 +8,13 @@ from loreport_core.claim_extract import (
     is_pending_verification_status,
     is_shallow_verification_claim,
 )
-from loreport_core.compile_markers import VERIFICATION_BEGIN, VERIFICATION_END
+from loreport_core.compile_markers import (
+    TABLE_COL_CLAIM,
+    TABLE_COL_CODE,
+    TABLE_COL_STATUS,
+    VERIFICATION_BEGIN,
+    VERIFICATION_END,
+)
 
 _VERIFICATION_ROW_RE = re.compile(
     r"^\|\s*(.+?)\s*\|\s*(.+?)\s*\|\s*(.+?)\s*\|$",
@@ -35,6 +41,26 @@ class VerificationRow:
         return False
 
 
+def _is_table_meta_row(claim: str, code_ref: str, status: str) -> bool:
+    """Skip header/separator rows — language-agnostic via loreport: status protocol."""
+    claim_cell = claim.strip()
+    if set(claim_cell) <= set("-: "):
+        return True
+    claim_key = claim_cell.strip("- ").lower()
+    if claim_key in {TABLE_COL_CLAIM, "claim"}:
+        return True
+    if code_cell := code_ref.strip():
+        if code_cell.lower() in {TABLE_COL_CODE, "code"} and not status.strip():
+            return True
+    status_cell = status.strip()
+    # Data rows use loreport:* tokens; localized column headers and | --- | fail here.
+    if status_cell and not status_cell.startswith("loreport:"):
+        return True
+    if status_cell.lower() in {TABLE_COL_STATUS, "status"}:
+        return True
+    return False
+
+
 def parse_verification_rows(content: str) -> list[VerificationRow]:
     block_match = re.search(
         rf"{re.escape(VERIFICATION_BEGIN)}(.*?){re.escape(VERIFICATION_END)}",
@@ -46,7 +72,7 @@ def parse_verification_rows(content: str) -> list[VerificationRow]:
     rows: list[VerificationRow] = []
     for match in _VERIFICATION_ROW_RE.finditer(block):
         claim, code_ref, status = match.group(1), match.group(2), match.group(3)
-        if claim.strip("- ").lower() in {"claim", "---"}:
+        if _is_table_meta_row(claim, code_ref, status):
             continue
         rows.append(
             VerificationRow(

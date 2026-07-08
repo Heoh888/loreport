@@ -340,22 +340,17 @@ Compiled aspect pages are PRE-BUILT from human docs before your run.
 
 Page structure (already on disk):
 - `> source:` — provenance
-- `<!-- loreport:section:human-doc -->` + `## human-doc` — FULL human doc inside `<!-- loreport:human-doc:do-not-edit -->`
-- `<!-- loreport:section:code-verification -->` — placeholder table inside `<!-- loreport:verification:pending -->`
+- `<!-- loreport:section:human-doc -->` — FULL human doc inside `<!-- loreport:human-doc:do-not-edit -->`
 - `<!-- loreport:section:details -->` — optional
 
 Your job on aspect pages (NOT rewrite human docs):
-1. read_file the pre-compiled aspect page — concrete claims (endpoints, queues) may be pre-listed
-2. read_file code to verify each claim; add rows for behavioral facts from human-doc prose
-3. edit_file ONLY the verification block between `<!-- loreport:verification:pending -->` markers
-4. Set status to `loreport:match` | `loreport:drift` | `loreport:missing-code` | `loreport:missing-doc`
-5. drift.md is rebuilt automatically from verification — do not edit drift.md manually
+- Keep human-doc section unchanged
+- Optionally fill details section
+- Do NOT add code-verification tables to aspect files — all divergences go to drift.md only
 
 FORBIDDEN:
-- Rewriting, shortening, or summarizing human-doc section (between human-doc markers)
-- Removing `<!-- loreport:human-doc:do-not-edit -->` markers
-- Verification rows that only assert a file/module exists — verify SPECIFIC claims
-- Replacing full human doc with bullet summary
+- Rewriting, shortening, or summarizing human-doc section
+- Adding audit/verification tables to aspect pages
 """.strip()
 
 INDEX_FILE_RULES = """
@@ -364,18 +359,22 @@ index.md is PRE-BUILT with full README/human overview in human-doc section.
 Your job on index.md:
 - Keep human-doc section unchanged (between human-doc markers)
 - Fill integrations section from human docs + code evidence
-- Fill code-verification table with top-level service claims (not per-file checks)
-- Update drift-summary section with link to drift.md + top 3 items
+- drift-summary syncs from drift.md automatically — do not duplicate gap bullets here
 FORBIDDEN: replacing README body with one-paragraph summary.
 """.strip()
 
 DRIFT_FILE_RULES = """
 Drift registry (`{loreport_dir}/services/<name>/drift.md`):
-- Built automatically from code-verification tables — do NOT edit drift.md manually
-- Set verification status tokens: `loreport:match` | `loreport:drift` | `loreport:missing-code` | `loreport:missing-doc`
-- Non-match rows appear in drift.md by severity (`critical` / `warning` / `info`)
-- When no drift: `<!-- loreport:drift:none -->` in critical section
-- Code = implementation truth; human docs = intent truth
+- ONLY place for doc↔code divergences — no tables in aspect files
+- Write ONLY items from eval `classifiedDrift` or after drift-classifier + drift-verifier
+- Traffic-light sections (translate headings to OUTPUT LANGUAGE, keep slugs):
+  - 🔴 **blocker** (`<!-- loreport:section:blocker -->`) — doc **falsely asserts** X, code contradicts
+  - 🟠 **respond** (`<!-- loreport:section:respond -->`) — ambiguous, needs team decision
+  - 🟡 **fix-doc** (`<!-- loreport:section:fix-doc -->`) — code ahead of docs (doc silent or thin)
+  - 🟢 **fix-code** (`<!-- loreport:section:fix-code -->`) — docs promise feature, code missing
+- Table: `aspect | human-doc | code | issue`
+- Remove `<!-- loreport:section:drift:pending -->` when done; if clean put `<!-- loreport:drift:none -->` in blocker section
+- FORBIDDEN: match rows, stub-ok rows, "no drift found" rows
 """.strip()
 
 SERVICE_FOLDER_LAYOUT = """

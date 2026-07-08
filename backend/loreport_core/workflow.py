@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 
 from loreport_core.constants import language_label, resolve_language
+from loreport_core.drift_classify import drift_normalize_js_helpers
 from loreport_core.integrity import MIN_SOURCE_FILE_PATHS
 from loreport_core.language import output_language_policy
 from loreport_core.scope import RepoScope, ServiceScope
@@ -61,6 +62,56 @@ PLATFORM_WRITER_SCHEMA: dict[str, object] = {
         },
     },
     "required": ["markdownSynthesis", "shallowServices"],
+}
+
+DRIFT_CLASSIFIER_SCHEMA: dict[str, object] = {
+    "type": "object",
+    "properties": {
+        "serviceName": {"type": "string"},
+        "items": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "aspect": {"type": "string"},
+                    "humanDoc": {"type": "string"},
+                    "code": {"type": "string"},
+                    "issue": {"type": "string"},
+                    "driftClass": {
+                        "type": "string",
+                        "description": (
+                            "match|stub-ok|doc-lies|doc-gap|code-gap|ambiguous"
+                        ),
+                    },
+                    "signal": {
+                        "type": "string",
+                        "description": (
+                            "aligned|silence|contradiction|doc-ahead|"
+                            "code-missing|stub|unclear — English only"
+                        ),
+                    },
+                },
+                "required": [
+                    "aspect",
+                    "humanDoc",
+                    "code",
+                    "issue",
+                    "driftClass",
+                    "signal",
+                ],
+            },
+        },
+    },
+    "required": ["serviceName", "items"],
+}
+
+DRIFT_VERIFIER_SCHEMA: dict[str, object] = {
+    "type": "object",
+    "properties": {
+        "confirmed": {"type": "boolean"},
+        "reason": {"type": "string"},
+    },
+    "required": ["confirmed", "reason"],
 }
 
 MIN_IMPLEMENTATION_PATHS = MIN_SOURCE_FILE_PATHS
@@ -163,10 +214,13 @@ def build_map_reduce_init_script(
     }
     lang_code = resolve_language(language)
     shallow_helpers = _SHALLOW_JS_HELPERS
+    drift_helpers = drift_normalize_js_helpers()
 
     return f"""
 // Loreport map-reduce init workflow — execute verbatim via eval
 {shallow_helpers}
+
+{drift_helpers}
 
 const services = {json.dumps(services, ensure_ascii=False)};
 const serviceMeta = {json.dumps(meta, ensure_ascii=False)};
@@ -178,6 +232,54 @@ const OUTPUT_LANGUAGE = {json.dumps(lang_code)};
 
 const researchSchema = {json.dumps(SERVICE_RESEARCH_SCHEMA, ensure_ascii=False)};
 const platformSchema = {json.dumps(PLATFORM_WRITER_SCHEMA, ensure_ascii=False)};
+const classifierSchema = {json.dumps(DRIFT_CLASSIFIER_SCHEMA, ensure_ascii=False)};
+const verifierSchema = {json.dumps(DRIFT_VERIFIER_SCHEMA, ensure_ascii=False)};
+
+const DROP_CLASSES = new Set(["match", "stub-ok"]);
+const VERIFY_CLASSES = new Set(["doc-lies", "ambiguous"]);
+const SEVERITY_BY_CLASS = {{
+  "doc-lies": "blocker",
+  "ambiguous": "respond",
+  "doc-gap": "fix-doc",
+  "code-gap": "fix-code",
+}};
+
+async function classifyDriftForService(result) {{
+  const classified = await task({{
+    description:
+      "Classify drift candidates for service `" + result.service + "`. "
+      + "Research notes: " + (result.markdownNotes || ""),
+    subagentType: "drift-classifier",
+    label: result.service + "-drift-classify",
+    responseSchema: classifierSchema,
+  }});
+  const confirmed = [];
+  for (const item of classified.items || []) {{
+    const driftClass = normalizeDriftClass(item);
+    if (DROP_CLASSES.has(driftClass)) continue;
+    const severity = SEVERITY_BY_CLASS[driftClass];
+    if (!severity) continue;
+    const normalized = {{ ...item, driftClass }};
+    if (VERIFY_CLASSES.has(driftClass)) {{
+      const verdict = await task({{
+        description: "Verify drift candidate: " + JSON.stringify(normalized),
+        subagentType: "drift-verifier",
+        label: result.service + "-drift-verify",
+        responseSchema: verifierSchema,
+      }});
+      if (!verdict.confirmed) continue;
+    }}
+    confirmed.push({{
+      aspect: item.aspect,
+      humanDoc: item.humanDoc,
+      code: item.code,
+      issue: item.issue,
+      driftClass,
+      severity,
+    }});
+  }}
+  return {{ service: result.service, driftItems: confirmed }};
+}}
 
 function buildRetryDescription(name, attempt) {{
   const base = taskDescriptions[name];
@@ -216,6 +318,15 @@ const shallowServices = results
   .filter((r) => r.stillShallow === true)
   .map((r) => r.service);
 
+const classifiedDrift = {{}};
+for (let i = 0; i < results.length; i += BATCH_SIZE) {{
+  const batch = results.slice(i, i + BATCH_SIZE);
+  const driftBatch = await Promise.all(batch.map((r) => classifyDriftForService(r)));
+  for (const entry of driftBatch) {{
+    classifiedDrift[entry.service] = entry.driftItems;
+  }}
+}}
+
 const platform = await task({{
   description:
     "Synthesize platform integrity overview in OUTPUT_LANGUAGE " + OUTPUT_LANGUAGE +
@@ -232,6 +343,7 @@ const platform = await task({{
   servicesProcessed: results.length,
   shallowServices,
   results,
+  classifiedDrift,
   platform,
 }});
 """.strip()
@@ -264,10 +376,13 @@ def build_map_reduce_update_script(
     }
     lang_code = resolve_language(language)
     shallow_helpers = _SHALLOW_JS_HELPERS
+    drift_helpers = drift_normalize_js_helpers()
 
     return f"""
 // Loreport targeted update workflow — execute verbatim via eval
 {shallow_helpers}
+
+{drift_helpers}
 
 const services = {json.dumps(filtered, ensure_ascii=False)};
 const serviceMeta = {json.dumps(meta, ensure_ascii=False)};
@@ -279,6 +394,54 @@ const MAX_RETRIES = {max_retries};
 const OUTPUT_LANGUAGE = {json.dumps(lang_code)};
 
 const researchSchema = {json.dumps(SERVICE_RESEARCH_SCHEMA, ensure_ascii=False)};
+const classifierSchema = {json.dumps(DRIFT_CLASSIFIER_SCHEMA, ensure_ascii=False)};
+const verifierSchema = {json.dumps(DRIFT_VERIFIER_SCHEMA, ensure_ascii=False)};
+
+const DROP_CLASSES = new Set(["match", "stub-ok"]);
+const VERIFY_CLASSES = new Set(["doc-lies", "ambiguous"]);
+const SEVERITY_BY_CLASS = {{
+  "doc-lies": "blocker",
+  "ambiguous": "respond",
+  "doc-gap": "fix-doc",
+  "code-gap": "fix-code",
+}};
+
+async function classifyDriftForService(result) {{
+  const classified = await task({{
+    description:
+      "Classify drift for updated service `" + result.service + "`. Notes: "
+      + (result.markdownNotes || ""),
+    subagentType: "drift-classifier",
+    label: result.service + "-drift-classify",
+    responseSchema: classifierSchema,
+  }});
+  const confirmed = [];
+  for (const item of classified.items || []) {{
+    const driftClass = normalizeDriftClass(item);
+    if (DROP_CLASSES.has(driftClass)) continue;
+    const severity = SEVERITY_BY_CLASS[driftClass];
+    if (!severity) continue;
+    const normalized = {{ ...item, driftClass }};
+    if (VERIFY_CLASSES.has(driftClass)) {{
+      const verdict = await task({{
+        description: "Verify drift candidate: " + JSON.stringify(normalized),
+        subagentType: "drift-verifier",
+        label: result.service + "-drift-verify",
+        responseSchema: verifierSchema,
+      }});
+      if (!verdict.confirmed) continue;
+    }}
+    confirmed.push({{
+      aspect: item.aspect,
+      humanDoc: item.humanDoc,
+      code: item.code,
+      issue: item.issue,
+      driftClass,
+      severity,
+    }});
+  }}
+  return {{ service: result.service, driftItems: confirmed }};
+}}
 
 async function researchOne(name) {{
   let last = null;
@@ -315,10 +478,20 @@ for (let pass = 0; pass < MAX_PASSES; pass++) {{
   }}
 }}
 
+const classifiedDrift = {{}};
+for (let i = 0; i < results.length; i += BATCH_SIZE) {{
+  const batch = results.slice(i, i + BATCH_SIZE);
+  const driftBatch = await Promise.all(batch.map((r) => classifyDriftForService(r)));
+  for (const entry of driftBatch) {{
+    classifiedDrift[entry.service] = entry.driftItems;
+  }}
+}}
+
 ({{
   workflow: "map-reduce-update",
   servicesProcessed: results.length,
   results,
+  classifiedDrift,
 }});
 """.strip()
 
@@ -333,15 +506,16 @@ def format_eval_workflow_block(
     lang_policy = output_language_policy(language)
     action = (
         "Read pre-compiled loreport/services/<name>/*.md (human docs already transcluded). "
-        "edit_file verification sections only; drift.md syncs from verification after each pass; then quickstart and platform."
+        "edit_file drift.md only; then quickstart and platform."
         if command == "init"
-        else "Update verification sections in affected loreport/services/<name>/ folders (drift.md syncs automatically)."
+        else "Update drift.md in affected loreport/services/<name>/ folders."
     )
     shallow_rule = (
         "5. For services in shallowServices or with stillShallow=true: read entrypoint, routes, "
-        "and every cited path before editing verification.\n"
-        "6. NEVER rewrite human-doc section — only fill code-verification table; drift.md is synced by Loreport.\n"
-        "7. VERIFY every required file from _pattern.json exists before ending the run."
+        "and every cited path before editing drift.md.\n"
+        "6. Use eval output `classifiedDrift` — write ONLY confirmed items to drift.md "
+        "traffic-light tables (blocker/respond/fix-doc/fix-code).\n"
+        "7. NEVER rewrite human-doc section. VERIFY every required file from _pattern.json exists."
     )
     return f"""
 Deterministic workflow (Eval map-reduce):

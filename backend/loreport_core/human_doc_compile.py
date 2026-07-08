@@ -2,31 +2,25 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from loreport_core.claim_extract import extract_claims_for_aspect
 from loreport_core.compile_markers import (
-    CLAIM_PLACEHOLDER,
     DETAILS_PENDING,
     DRIFT_PENDING,
+    DRIFT_TRAFFIC_LEGEND,
     HUMAN_DOC_BEGIN,
     HUMAN_DOC_END,
     INTEGRATIONS_PENDING,
     SECTION_DETAILS,
-    SECTION_DRIFT_CRITICAL,
-    SECTION_DRIFT_INFO,
+    SECTION_DRIFT_BLOCKER,
+    SECTION_DRIFT_FIX_CODE,
+    SECTION_DRIFT_FIX_DOC,
+    SECTION_DRIFT_RESPOND,
     SECTION_DRIFT_SUMMARY,
     SECTION_DRIFT_TITLE,
-    SECTION_DRIFT_WARNING,
     SECTION_HUMAN_DOC,
     SECTION_INDEX_SECTIONS,
     SECTION_INTEGRATIONS,
-    SECTION_VERIFICATION,
-    STATUS_PENDING,
-    TABLE_COL_CLAIM,
-    TABLE_COL_CODE,
-    TABLE_COL_STATUS,
-    VERIFICATION_BEGIN,
-    VERIFICATION_END,
     aspect_link_label,
+    drift_severity_table_header,
     section_heading,
 )
 from loreport_core.constants import LOREPORT_DIR
@@ -79,29 +73,6 @@ def _format_human_doc_body(
     return "\n\n".join(blocks)
 
 
-def _verification_table_placeholder() -> str:
-    return (
-        f"{VERIFICATION_BEGIN}\n"
-        f"| {TABLE_COL_CLAIM} | {TABLE_COL_CODE} | {TABLE_COL_STATUS} |\n"
-        "| --- | --- | --- |\n"
-        f"| {CLAIM_PLACEHOLDER} | | {STATUS_PENDING} |\n"
-        f"{VERIFICATION_END}"
-    )
-
-
-def _verification_table_from_claims(claims: list[str]) -> str:
-    if not claims:
-        return _verification_table_placeholder()
-    rows = [
-        f"| {TABLE_COL_CLAIM} | {TABLE_COL_CODE} | {TABLE_COL_STATUS} |",
-        "| --- | --- | --- |",
-    ]
-    for claim in claims:
-        safe_claim = claim.replace("|", "\\|")
-        rows.append(f"| {safe_claim} | | {STATUS_PENDING} |")
-    return f"{VERIFICATION_BEGIN}\n" + "\n".join(rows) + f"\n{VERIFICATION_END}"
-
-
 def compile_aspect_draft(
     pattern: ServiceDocPattern,
     aspect: DocAspect,
@@ -111,8 +82,6 @@ def compile_aspect_draft(
 ) -> str:
     del language
     human_body = _format_human_doc_body(repo_path, pattern.service_name, aspect.human_files)
-    claims = extract_claims_for_aspect(human_body, aspect.id)
-    verification_table = _verification_table_from_claims(claims)
     return "\n\n".join(
         [
             _format_sources(pattern.service_name, aspect.human_files),
@@ -120,8 +89,6 @@ def compile_aspect_draft(
             HUMAN_DOC_BEGIN,
             human_body,
             HUMAN_DOC_END,
-            section_heading(SECTION_VERIFICATION),
-            verification_table,
             section_heading(SECTION_DETAILS),
             DETAILS_PENDING,
         ]
@@ -141,8 +108,6 @@ def compile_index_draft(
     )
     human_files = overview_aspect.human_files if overview_aspect else ()
     human_body = _format_human_doc_body(repo_path, pattern.service_name, human_files)
-    overview_claims = extract_claims_for_aspect(human_body, "overview")
-    verification_table = _verification_table_from_claims(overview_claims)
 
     section_links: list[str] = []
     for aspect in pattern.aspects:
@@ -166,25 +131,28 @@ def compile_index_draft(
             INTEGRATIONS_PENDING,
             section_heading(SECTION_DRIFT_SUMMARY),
             "[drift.md](drift.md)",
-            section_heading(SECTION_VERIFICATION),
-            verification_table,
         ]
     )
 
 
 def compile_drift_draft(*, language: str | None = None) -> str:
     del language
+    empty_table = drift_severity_table_header()
     return "\n\n".join(
         [
             section_heading(SECTION_DRIFT_TITLE, level=1),
-            section_heading(SECTION_DRIFT_CRITICAL),
+            DRIFT_TRAFFIC_LEGEND,
             DRIFT_PENDING,
-            section_heading(SECTION_DRIFT_WARNING),
-            "",
-            section_heading(SECTION_DRIFT_INFO),
-            "",
+            section_heading(SECTION_DRIFT_BLOCKER, label="🔴 blocker"),
+            empty_table,
+            section_heading(SECTION_DRIFT_RESPOND, label="🟠 respond"),
+            empty_table,
+            section_heading(SECTION_DRIFT_FIX_DOC, label="🟡 fix-doc"),
+            empty_table,
+            section_heading(SECTION_DRIFT_FIX_CODE, label="🟢 fix-code"),
+            empty_table,
         ]
-    )
+    ) + "\n"
 
 
 def write_compiled_drafts(
@@ -219,7 +187,7 @@ def write_compiled_drafts(
 
         drift_target = service_dir / DRIFT_FILE
         if not only_missing or not drift_target.is_file():
-            drift_target.write_text(compile_drift_draft(language=language) + "\n", encoding="utf-8")
+            drift_target.write_text(compile_drift_draft(language=language), encoding="utf-8")
             written += 1
 
     return written

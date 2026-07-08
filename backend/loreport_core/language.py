@@ -33,8 +33,8 @@ Only keep as-is: file paths, directory names, env vars, API route strings, code 
 HTML loreport markers (`<!-- loreport:... -->`), slug headings until you translate them,
 and short literal quotes from source files.
 
-Pre-compiled pages use slug headings (`human-doc`, `code-verification`,
-table cols `claim|code|status`).
+Pre-compiled pages use slug headings (`human-doc`, drift `blocker|respond|fix-doc|fix-code`,
+table cols `aspect|human-doc|code|issue`).
 Translate slugs to {label} when you edit_file — keep markers unchanged.
 
 Forbidden in loreport/*.md:

@@ -3,10 +3,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-from loreport_core.compile_markers import DRIFT_NONE, DRIFT_PENDING, INTEGRATIONS_PENDING
+from loreport_core.compile_markers import INTEGRATIONS_PENDING
 from loreport_core.constants import LOREPORT_DIR
 from loreport_core.doc_pattern import DRIFT_FILE, ServiceDocPattern
-from loreport_core.verification_parse import parse_verification_rows
+from loreport_core.drift_parse import drift_is_pending
 
 
 @dataclass(frozen=True, slots=True)
@@ -21,60 +21,8 @@ class PendingVerificationTarget:
     drift_pending: bool = False
 
 
-def _aspect_id_for_file(pattern: ServiceDocPattern, loreport_file: str) -> str:
-    for aspect in pattern.aspects:
-        if aspect.loreport_file == loreport_file:
-            return aspect.id
-    return "general"
-
-
 def _integrations_pending(content: str) -> bool:
     return INTEGRATIONS_PENDING in content
-
-
-def _drift_pending(
-    repo_path: Path,
-    service_name: str,
-    loreport_dir: str,
-) -> bool:
-    drift_path = repo_path / loreport_dir / "services" / service_name / DRIFT_FILE
-    if not drift_path.is_file():
-        return True
-    try:
-        content = drift_path.read_text(encoding="utf-8")
-    except OSError:
-        return True
-    return DRIFT_PENDING in content and DRIFT_NONE not in content
-
-
-def analyze_service_page(
-    *,
-    service_name: str,
-    loreport_file: str,
-    aspect_id: str,
-    content: str,
-    language: str | None = None,
-    drift_pending: bool = False,
-) -> PendingVerificationTarget | None:
-    rows = parse_verification_rows(content)
-    has_placeholder = not rows or all(row.is_pending for row in rows)
-    pending = tuple(row.claim for row in rows if row.is_pending)
-    shallow = tuple(row.claim for row in rows if row.is_shallow)
-    integrations_pending = aspect_id == "overview" and _integrations_pending(content)
-
-    if not pending and not shallow and not integrations_pending and not drift_pending:
-        return None
-
-    return PendingVerificationTarget(
-        service_name=service_name,
-        loreport_file=loreport_file,
-        aspect_id=aspect_id,
-        pending_claims=pending,
-        shallow_claims=shallow,
-        has_placeholder=has_placeholder,
-        integrations_pending=integrations_pending,
-        drift_pending=drift_pending,
-    )
 
 
 def find_pending_verification_targets(
@@ -84,6 +32,7 @@ def find_pending_verification_targets(
     loreport_dir: str = LOREPORT_DIR,
     language: str | None = None,
 ) -> list[PendingVerificationTarget]:
+    del language
     targets: list[PendingVerificationTarget] = []
     services_root = repo_path / loreport_dir / "services"
     if not services_root.is_dir():
@@ -96,43 +45,57 @@ def find_pending_verification_targets(
         if pattern is None:
             continue
 
-        drift_pending = _drift_pending(repo_path, service_dir.name, loreport_dir)
-
-        for aspect in pattern.aspects:
-            page_path = service_dir / aspect.loreport_file
-            if not page_path.is_file():
-                continue
+        index_path = service_dir / "index.md"
+        if index_path.is_file():
             try:
-                content = page_path.read_text(encoding="utf-8")
+                index_content = index_path.read_text(encoding="utf-8")
             except OSError:
-                continue
+                index_content = ""
+            if _integrations_pending(index_content):
+                targets.append(
+                    PendingVerificationTarget(
+                        service_name=service_dir.name,
+                        loreport_file="index.md",
+                        aspect_id="overview",
+                        pending_claims=(),
+                        shallow_claims=(),
+                        has_placeholder=False,
+                        integrations_pending=True,
+                    )
+                )
 
-            target = analyze_service_page(
-                service_name=service_dir.name,
-                loreport_file=aspect.loreport_file,
-                aspect_id=aspect.id,
-                content=content,
-                language=language,
-                drift_pending=drift_pending and aspect.id == "overview",
+        drift_path = service_dir / DRIFT_FILE
+        if not drift_path.is_file():
+            targets.append(
+                PendingVerificationTarget(
+                    service_name=service_dir.name,
+                    loreport_file=DRIFT_FILE,
+                    aspect_id="drift",
+                    pending_claims=(),
+                    shallow_claims=(),
+                    has_placeholder=True,
+                    drift_pending=True,
+                )
             )
-            if target is not None:
-                targets.append(target)
+            continue
 
-        if drift_pending:
-            drift_target = PendingVerificationTarget(
-                service_name=service_dir.name,
-                loreport_file=DRIFT_FILE,
-                aspect_id="drift",
-                pending_claims=(),
-                shallow_claims=(),
-                has_placeholder=True,
-                drift_pending=True,
+        try:
+            drift_content = drift_path.read_text(encoding="utf-8")
+        except OSError:
+            drift_content = ""
+
+        if drift_is_pending(drift_content):
+            targets.append(
+                PendingVerificationTarget(
+                    service_name=service_dir.name,
+                    loreport_file=DRIFT_FILE,
+                    aspect_id="drift",
+                    pending_claims=(),
+                    shallow_claims=(),
+                    has_placeholder=True,
+                    drift_pending=True,
+                )
             )
-            if not any(
-                t.service_name == drift_target.service_name and t.loreport_file == DRIFT_FILE
-                for t in targets
-            ):
-                targets.append(drift_target)
 
     return targets
 
@@ -142,8 +105,6 @@ def verification_progress_snapshot(targets: list[PendingVerificationTarget]) -> 
     for target in sorted(targets, key=lambda item: (item.service_name, item.loreport_file)):
         tokens.append(target.service_name)
         tokens.append(target.loreport_file)
-        tokens.extend(target.pending_claims)
-        tokens.extend(target.shallow_claims)
         if target.integrations_pending:
             tokens.append("integrations:pending")
         if target.drift_pending:
@@ -154,8 +115,6 @@ def verification_progress_snapshot(targets: list[PendingVerificationTarget]) -> 
 def count_open_verification_items(targets: list[PendingVerificationTarget]) -> int:
     total = 0
     for target in targets:
-        total += len(target.pending_claims)
-        total += len(target.shallow_claims)
         if target.integrations_pending:
             total += 1
         if target.drift_pending:
@@ -174,20 +133,15 @@ def format_convergence_targets_block(
             f"{loreport_dir}/services/{target.service_name}/{target.loreport_file}"
         )
         lines = [f"### `{target.service_name}` → `{rel_path}`"]
-        if target.pending_claims:
-            lines.append("- Pending claims:")
-            for claim in target.pending_claims:
-                lines.append(f"  - {claim}")
-        if target.shallow_claims:
-            lines.append("- Shallow rows (replace with specific claims from human doc):")
-            for claim in target.shallow_claims:
-                lines.append(f"  - {claim}")
         if target.integrations_pending:
             lines.append(
                 "- Fill integrations section "
                 "(`<!-- loreport:section:integrations:pending -->`)"
             )
         if target.drift_pending:
-            lines.append("- drift.md will sync after verification (focus on status tokens)")
+            lines.append(
+                "- Fill drift.md (🔴 blocker / 🟠 respond / 🟡 fix-doc / 🟢 fix-code); "
+                "use drift-classifier + drift-verifier; remove drift:pending or set drift:none"
+            )
         blocks.append("\n".join(lines))
     return "\n\n".join(blocks)

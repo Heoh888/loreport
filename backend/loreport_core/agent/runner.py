@@ -30,7 +30,7 @@ from loreport_core.doc_pattern import (
     group_missing_by_service,
     write_service_patterns,
 )
-from loreport_core.drift_sync import sync_repo_drift
+from loreport_core.drift_sync import sync_repo_drift_summaries
 from loreport_core.git import create_run_context, write_last_update_metadata
 from loreport_core.human_doc_compile import write_compiled_drafts
 from loreport_core.prompts import (
@@ -72,8 +72,8 @@ def _sync_service_drifts(
     *,
     loreport_dir: str,
 ) -> None:
-    synced = sync_repo_drift(repo_path, patterns, loreport_dir=loreport_dir)
-    logger.info("Synced drift.md from verification tables for %d services", synced)
+    synced = sync_repo_drift_summaries(repo_path, patterns, loreport_dir=loreport_dir)
+    logger.info("Synced drift-summary from drift.md for %d services", synced)
 
 
 def _create_thread_id(repo_path: Path) -> str:

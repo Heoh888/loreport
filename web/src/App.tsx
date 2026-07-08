@@ -395,7 +395,14 @@ export function App() {
                 {docLoading ? (
                   <p className="muted">Загрузка…</p>
                 ) : (
-                  <div ref={docContentRef} className="markdown-body" />
+                  <div
+                    ref={docContentRef}
+                    className={
+                      selectedPath?.endsWith("/drift.md")
+                        ? "markdown-body drift-view"
+                        : "markdown-body"
+                    }
+                  />
                 )}
               </article>
             </div>
