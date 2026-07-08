@@ -335,6 +335,12 @@ Integrity requirements:
 - Record all drifts in `drift.md` by severity; human docs stay canonical on disk.
 - Platform quickstart must list every service and summarize platform-wide gaps.
 
+INIT COMPLETION (mandatory):
+- `_pattern.json` is pre-generated — you MUST write every required `.md` file listed in patterns.
+- For EACH service: `index.md`, `drift.md`, and every aspect file from the pattern block below.
+- Also write `{loreport_dir}/quickstart.md` and `{loreport_dir}/platform/` when ready.
+- A folder with only `_pattern.json` is a FAILED run — keep writing until all markdown files exist.
+
 Git context:
 {context.git_summary}
 """.strip()

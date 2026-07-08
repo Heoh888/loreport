@@ -14,6 +14,8 @@ def _hash_directory(root: Path) -> str:
             continue
         if path.name == UPDATE_METADATA_FILE:
             continue
+        if path.name.startswith("_"):
+            continue
         rel = path.relative_to(root).as_posix().encode()
         digest.update(rel)
         digest.update(path.read_bytes())

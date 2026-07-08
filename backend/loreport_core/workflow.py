@@ -340,7 +340,8 @@ def format_eval_workflow_block(
     shallow_rule = (
         "5. For services in shallowServices or with stillShallow=true: BEFORE write_file, "
         "read_file entrypoint, routes, and every cited path. "
-        "Implementation signals must list opened files only — not directories."
+        "Implementation signals must list opened files only — not directories.\n"
+        "6. VERIFY every required file from _pattern.json exists via write_file before ending the run."
     )
     return f"""
 Deterministic workflow (Eval map-reduce):

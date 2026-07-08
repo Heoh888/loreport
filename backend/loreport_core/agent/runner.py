@@ -21,8 +21,11 @@ from loreport_core.constants import (
     resolve_provider,
 )
 from loreport_core.doc_pattern import (
+    IncompleteLoreportError,
     discover_repo_doc_patterns,
+    find_incomplete_service_folders,
     format_doc_patterns_block,
+    format_incomplete_services_warning,
     write_service_patterns,
 )
 from loreport_core.git import create_run_context, write_last_update_metadata
@@ -191,7 +194,6 @@ async def run_loreport_agent(
     use_dynamic = use_workflow and dynamic_workflow_enabled
 
     doc_patterns = discover_repo_doc_patterns(repo_path, scope.service_names)
-    write_service_patterns(repo_path, doc_patterns, loreport_dir=loreport_dir)
     doc_patterns_block = format_doc_patterns_block(doc_patterns, loreport_dir=loreport_dir)
 
     user_message = create_run_user_message(
@@ -210,6 +212,7 @@ async def run_loreport_agent(
     )
 
     before = create_loreport_content_snapshot(repo_path, loreport_dir)
+    write_service_patterns(repo_path, doc_patterns, loreport_dir=loreport_dir)
 
     await asyncio.to_thread(
         _run_agent_sync,
@@ -228,6 +231,14 @@ async def run_loreport_agent(
 
     after = create_loreport_content_snapshot(repo_path, loreport_dir)
     changed = before != after
+
+    missing = find_incomplete_service_folders(repo_path, loreport_dir=loreport_dir)
+    if missing:
+        warning = format_incomplete_services_warning(missing)
+        logger.error("%s", warning)
+        if command == "init":
+            raise IncompleteLoreportError(warning)
+
     if changed:
         await write_last_update_metadata(repo_path, command, resolved_model, loreport_dir)
         logger.info("Loreport content changed for %s", repo_path)

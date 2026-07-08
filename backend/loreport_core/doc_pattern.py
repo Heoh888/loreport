@@ -32,6 +32,10 @@ DRIFT_FILE = "drift.md"
 PATTERN_FILE = "_pattern.json"
 
 
+class IncompleteLoreportError(RuntimeError):
+    """Raised when service folders lack required compiled markdown files."""
+
+
 @dataclass(frozen=True, slots=True)
 class DocAspect:
     id: str
@@ -232,6 +236,53 @@ def format_doc_patterns_block(
         for pattern in patterns.values()
     ]
     return "\n\n".join(blocks)
+
+
+def required_lore_files_for_pattern(pattern: ServiceDocPattern) -> tuple[str, ...]:
+    files = {DRIFT_FILE}
+    for aspect in pattern.aspects:
+        files.add(aspect.loreport_file)
+    return tuple(sorted(files))
+
+
+def find_incomplete_service_folders(
+    repo_path: Path,
+    *,
+    loreport_dir: str = LOREPORT_DIR,
+) -> list[str]:
+    services_root = repo_path / loreport_dir / "services"
+    if not services_root.is_dir():
+        return []
+
+    missing: list[str] = []
+    for service_dir in sorted(services_root.iterdir(), key=lambda path: path.name.lower()):
+        if not service_dir.is_dir():
+            continue
+        pattern_path = service_dir / PATTERN_FILE
+        if not pattern_path.is_file():
+            continue
+        try:
+            payload = json.loads(pattern_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            missing.append(f"{service_dir.name}/_pattern.json (invalid)")
+            continue
+        required = {DRIFT_FILE}
+        for aspect in payload.get("aspects", []):
+            lore_file = aspect.get("loreportFile")
+            if isinstance(lore_file, str):
+                required.add(lore_file)
+        for filename in sorted(required):
+            if not (service_dir / filename).is_file():
+                missing.append(f"{service_dir.name}/{filename}")
+    return missing
+
+
+def format_incomplete_services_warning(missing: list[str]) -> str:
+    if not missing:
+        return ""
+    preview = ", ".join(missing[:12])
+    suffix = f" (+{len(missing) - 12} more)" if len(missing) > 12 else ""
+    return f"Incomplete service folders — missing: {preview}{suffix}"
 
 
 COMPILED_ASPECT_RULES = """
