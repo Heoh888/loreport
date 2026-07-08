@@ -1,5 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { docPathFromLocation, docUrl, resolveDocLink, wireDocLinks } from "./docLinks";
+import {
+  aspectLabel,
+  defaultDocPath,
+  parseDocTree,
+  sortAspectDocs,
+  type DocTreeNode,
+  type ServiceDocGroup,
+} from "./docsNav";
 import { renderMermaidIn } from "./renderMermaid";
 
 type SyncStatus = {
@@ -22,31 +30,15 @@ type AppSettings = {
   languages: LanguageOption[];
 };
 
-type DocTreeNode = {
-  path: string;
-  name: string;
-  children: DocTreeNode[] | null;
-};
-
-function flattenDocs(nodes: DocTreeNode[]): DocTreeNode[] {
-  const out: DocTreeNode[] = [];
-  for (const node of nodes) {
-    if (node.children?.length) {
-      out.push(...flattenDocs(node.children));
-    } else {
-      out.push(node);
-    }
-  }
-  return out;
-}
-
 function formatDate(value: string | null): string | null {
   if (!value) return null;
   return new Date(value).toLocaleString();
 }
 
-function defaultDocPath(flat: DocTreeNode[]): string | null {
-  return flat.find((doc) => doc.path === "quickstart.md")?.path ?? flat[0]?.path ?? null;
+function findServiceForPath(groups: ServiceDocGroup[], path: string | null): string | null {
+  if (!path) return null;
+  const match = groups.find((group) => path.startsWith(`services/${group.name}/`));
+  return match?.name ?? null;
 }
 
 export function App() {
@@ -55,27 +47,42 @@ export function App() {
   const [language, setLanguage] = useState("en");
   const [docs, setDocs] = useState<DocTreeNode[]>([]);
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
+  const [selectedService, setSelectedService] = useState<string | null>(null);
   const [docHtml, setDocHtml] = useState<string>("");
   const [docLoading, setDocLoading] = useState(false);
   const [loading, setLoading] = useState(false);
   const docContentRef = useRef<HTMLDivElement>(null);
 
-  const flatDocs = useMemo(() => flattenDocs(docs), [docs]);
-  const docPathSet = useMemo(() => new Set(flatDocs.map((doc) => doc.path)), [flatDocs]);
+  const docNav = useMemo(() => parseDocTree(docs), [docs]);
+  const docPathSet = useMemo(() => new Set(docNav.allDocs.map((doc) => doc.path)), [docNav.allDocs]);
 
-  const selectDoc = useCallback((path: string, historyMode: "push" | "replace" = "push") => {
-    setSelectedPath(path);
-    const url = docUrl(path);
-    if (window.location.pathname === url) {
-      return;
+  const activeService = useMemo(() => {
+    if (selectedService) {
+      return docNav.serviceGroups.find((group) => group.name === selectedService) ?? null;
     }
-    const state = { docPath: path };
-    if (historyMode === "replace") {
-      window.history.replaceState(state, "", url);
-    } else {
-      window.history.pushState(state, "", url);
-    }
-  }, []);
+    return null;
+  }, [docNav.serviceGroups, selectedService]);
+
+  const selectDoc = useCallback(
+    (path: string, historyMode: "push" | "replace" = "push") => {
+      setSelectedPath(path);
+      const service = findServiceForPath(docNav.serviceGroups, path);
+      if (service) {
+        setSelectedService(service);
+      }
+      const url = docUrl(path);
+      if (window.location.pathname === url) {
+        return;
+      }
+      const state = { docPath: path };
+      if (historyMode === "replace") {
+        window.history.replaceState(state, "", url);
+      } else {
+        window.history.pushState(state, "", url);
+      }
+    },
+    [docNav.serviceGroups],
+  );
 
   const loadSettings = useCallback(async () => {
     const res = await fetch("/api/settings");
@@ -95,8 +102,8 @@ export function App() {
     const tree = (await res.json()) as DocTreeNode[];
     setDocs(tree);
 
-    const flat = flattenDocs(tree);
-    const paths = new Set(flat.map((doc) => doc.path));
+    const nav = parseDocTree(tree);
+    const paths = new Set(nav.allDocs.map((doc) => doc.path));
     const fromUrl = docPathFromLocation(window.location.pathname, paths);
 
     setSelectedPath((current) => {
@@ -106,10 +113,15 @@ export function App() {
       if (current && paths.has(current)) {
         return current;
       }
-      return defaultDocPath(flat);
+      return defaultDocPath(nav);
     });
 
-    const resolved = fromUrl ?? defaultDocPath(flat);
+    setSelectedService((current) => {
+      const resolved = fromUrl ?? defaultDocPath(nav);
+      return findServiceForPath(nav.serviceGroups, resolved) ?? current;
+    });
+
+    const resolved = fromUrl ?? defaultDocPath(nav);
     if (resolved) {
       window.history.replaceState({ docPath: resolved }, "", docUrl(resolved));
     }
@@ -151,11 +163,12 @@ export function App() {
       const path = docPathFromLocation(window.location.pathname, docPathSet);
       if (path) {
         setSelectedPath(path);
+        setSelectedService(findServiceForPath(docNav.serviceGroups, path));
       }
     };
     window.addEventListener("popstate", onPopState);
     return () => window.removeEventListener("popstate", onPopState);
-  }, [docPathSet]);
+  }, [docNav.serviceGroups, docPathSet]);
 
   useEffect(() => {
     if (selectedPath) {
@@ -207,6 +220,17 @@ export function App() {
     }
   }
 
+  function openService(group: ServiceDocGroup) {
+    setSelectedService(group.name);
+    const preferred =
+      group.docs.find((doc) => doc.name === "index.md")?.path ??
+      group.docs.find((doc) => doc.name !== "drift.md")?.path ??
+      group.docs[0]?.path;
+    if (preferred) {
+      selectDoc(preferred);
+    }
+  }
+
   const statusLabel =
     status?.state === "running"
       ? "выполняется"
@@ -240,7 +264,9 @@ export function App() {
           <p className="mono">HEAD {status.head.slice(0, 12)}…</p>
         )}
         {status?.state === "running" && (
-          <p className="muted">Init на большом репозитории может занять 10–30 минут. Следи за логами контейнера.</p>
+          <p className="muted">
+            Init на большом репозитории может занять 10–30 минут. Следи за логами контейнера.
+          </p>
         )}
         {status?.error && <p className="error">{status.error}</p>}
 
@@ -286,31 +312,93 @@ export function App() {
 
       <section className="card docs-card">
         <h2>Документация</h2>
-        {flatDocs.length === 0 ? (
+        {docNav.allDocs.length === 0 ? (
           <p className="muted">
             Пока нет файлов в <code>loreport/</code>. Выбери язык и нажми Init.
           </p>
         ) : (
           <div className="docs-layout">
             <nav className="docs-nav">
-              {flatDocs.map((doc) => (
-                <button
-                  key={doc.path}
-                  type="button"
-                  className={doc.path === selectedPath ? "doc-link active" : "doc-link"}
-                  onClick={() => selectDoc(doc.path)}
-                >
-                  {doc.name.replace(/\.md$/, "")}
-                </button>
-              ))}
-            </nav>
-            <article className="doc-content">
-              {docLoading ? (
-                <p className="muted">Загрузка…</p>
-              ) : (
-                <div ref={docContentRef} className="markdown-body" />
+              {docNav.platformDocs.length > 0 && (
+                <div className="docs-nav-section">
+                  <span className="docs-nav-title">Платформа</span>
+                  {docNav.platformDocs.map((doc) => (
+                    <button
+                      key={doc.path}
+                      type="button"
+                      className={doc.path === selectedPath ? "doc-link active" : "doc-link"}
+                      onClick={() => selectDoc(doc.path)}
+                    >
+                      {aspectLabel(doc.name)}
+                    </button>
+                  ))}
+                </div>
               )}
-            </article>
+
+              {docNav.serviceGroups.length > 0 && (
+                <div className="docs-nav-section">
+                  <span className="docs-nav-title">Сервисы</span>
+                  {docNav.serviceGroups.map((group) => (
+                    <button
+                      key={group.name}
+                      type="button"
+                      className={
+                        selectedService === group.name ? "doc-link active service-link" : "doc-link service-link"
+                      }
+                      onClick={() => openService(group)}
+                    >
+                      {group.name}
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {docNav.legacyServiceDocs.length > 0 && (
+                <div className="docs-nav-section">
+                  <span className="docs-nav-title">Legacy</span>
+                  {docNav.legacyServiceDocs.map((doc) => (
+                    <button
+                      key={doc.path}
+                      type="button"
+                      className={doc.path === selectedPath ? "doc-link active" : "doc-link"}
+                      onClick={() => selectDoc(doc.path)}
+                    >
+                      {aspectLabel(doc.name)}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </nav>
+
+            <div className="docs-main">
+              {activeService && (
+                <nav className="aspect-tabs">
+                  {sortAspectDocs(activeService.docs).map((doc) => (
+                    <button
+                      key={doc.path}
+                      type="button"
+                      className={
+                        doc.path === selectedPath
+                          ? "aspect-tab active"
+                          : doc.name === "drift.md"
+                            ? "aspect-tab drift-tab"
+                            : "aspect-tab"
+                      }
+                      onClick={() => selectDoc(doc.path)}
+                    >
+                      {aspectLabel(doc.name)}
+                    </button>
+                  ))}
+                </nav>
+              )}
+              <article className="doc-content">
+                {docLoading ? (
+                  <p className="muted">Загрузка…</p>
+                ) : (
+                  <div ref={docContentRef} className="markdown-body" />
+                )}
+              </article>
+            </div>
           </div>
         )}
       </section>

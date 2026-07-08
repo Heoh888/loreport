@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 
 from loreport_core.constants import language_label, resolve_language
+from loreport_core.integrity import MIN_SOURCE_FILE_PATHS
 from loreport_core.language import output_language_policy
 from loreport_core.scope import RepoScope, ServiceScope
 
@@ -12,19 +13,19 @@ SERVICE_RESEARCH_SCHEMA: dict[str, object] = {
         "serviceName": {"type": "string"},
         "implementationPathCount": {
             "type": "number",
-            "description": "Count of distinct code file paths in implementation signals",
+            "description": "Count of opened files in readPathsInImplementation",
         },
         "shallow": {
             "type": "boolean",
             "description": (
-                "True if doc-only, path count too low, "
-                "or citedPathsInGaps contains unread local paths"
+                "True if doc-only, too few opened files, "
+                "or citedPathsInGaps not covered by opened files"
             ),
         },
         "readPathsInImplementation": {
             "type": "array",
             "items": {"type": "string"},
-            "description": "Repo-relative paths opened and listed in Implementation signals",
+            "description": "Repo-relative files opened with read_file (not directories)",
         },
         "citedPathsInGaps": {
             "type": "array",
@@ -62,30 +63,40 @@ PLATFORM_WRITER_SCHEMA: dict[str, object] = {
     "required": ["markdownSynthesis", "shallowServices"],
 }
 
-MIN_IMPLEMENTATION_PATHS = 5
+MIN_IMPLEMENTATION_PATHS = MIN_SOURCE_FILE_PATHS
 MAX_SERVICE_RETRIES = 3
 
 _SHALLOW_JS_HELPERS = """
 function normalizePath(path) {{
-  return (path || "").replace(/^`+|`+$/g, "").replace(/^\\//, "").toLowerCase();
+  return (path || "").replace(/^`+|`+$/g, "").replace(/^\\//, "").toLowerCase().replace(/\\/$/, "");
 }}
 
-function pathIsCovered(cited, readSet) {{
-  const norm = normalizePath(cited);
-  if (!norm) return true;
-  if (readSet.has(norm)) return true;
-  for (const readPath of readSet) {{
-    if (readPath.startsWith(norm) || norm.startsWith(readPath)) return true;
-  }}
-  return false;
+function isRepoFilePath(path) {{
+  const norm = normalizePath(path);
+  if (!norm) return false;
+  const base = norm.split("/").pop();
+  return base.includes(".");
+}}
+
+function filterSourceFiles(paths) {{
+  return (paths || []).filter((path) => isRepoFilePath(path));
+}}
+
+function citationIsCovered(cited, readPaths) {{
+  const citedNorm = normalizePath(cited);
+  if (!citedNorm) return true;
+  const readFiles = filterSourceFiles(readPaths).map(normalizePath);
+  if (isRepoFilePath(cited)) return readFiles.includes(citedNorm);
+  const dirPrefix = citedNorm + "/";
+  return readFiles.some((readFile) => readFile.startsWith(dirPrefix));
 }}
 
 function resultIsShallow(result) {{
   const readPaths = result?.readPathsInImplementation ?? [];
   const citedPaths = result?.citedPathsInGaps ?? [];
-  const readSet = new Set(readPaths.map(normalizePath));
-  const unreadCited = citedPaths.filter((path) => !pathIsCovered(path, readSet));
-  const paths = result?.implementationPathCount ?? readPaths.length;
+  const openedFiles = filterSourceFiles(readPaths);
+  const unreadCited = citedPaths.filter((path) => !citationIsCovered(path, readPaths));
+  const paths = result?.implementationPathCount ?? openedFiles.length;
   return result?.shallow === true || paths < MIN_PATHS || unreadCited.length > 0;
 }}
 """.strip()
@@ -128,8 +139,8 @@ def build_service_task_description(
         f"{' '.join(hints)} "
         f"Return full integrity notes in {label}. "
         f"Count implementation paths honestly. "
-        f"Set shallow=true if < {MIN_IMPLEMENTATION_PATHS} paths "
-        f"or citedPathsInGaps lists paths absent from readPathsInImplementation."
+        f"Set shallow=true if < {MIN_IMPLEMENTATION_PATHS} opened files "
+        f"or citedPathsInGaps not covered by opened files in readPathsInImplementation."
     )
 
 
@@ -321,15 +332,15 @@ def format_eval_workflow_block(
 ) -> str:
     lang_policy = output_language_policy(language)
     action = (
-        "Write or update loreport/services/*.md from results[].markdownNotes, "
-        "then quickstart and platform from platform.markdownSynthesis."
+        "Write or update loreport/services/<name>/ folders from results — "
+        "index.md, drift.md, and aspect files; then quickstart and platform."
         if command == "init"
-        else "Update only affected loreport/services/*.md from results[].markdownNotes."
+        else "Update only affected loreport/services/<name>/ folders from results."
     )
     shallow_rule = (
         "5. For services in shallowServices or with stillShallow=true: BEFORE write_file, "
-        "read entrypoint, routers, and every path in citedPathsInGaps (read_file/grep). "
-        "Every local path in Gaps & drift must also appear in Implementation signals."
+        "read_file entrypoint, routes, and every cited path. "
+        "Implementation signals must list opened files only — not directories."
     )
     return f"""
 Deterministic workflow (Eval map-reduce):

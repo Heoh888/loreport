@@ -6,10 +6,10 @@ SERVICE_PAGE_SECTIONS = """
 Service page structure (translate ALL headings and prose into OUTPUT LANGUAGE):
 1. Purpose — one paragraph on service role
 2. Human context — links to README, tech.docs/, ADR
-3. Implementation signals — code paths with one-line roles (min 8 when code exists)
-4. Integrations — table with three columns (translate headers): system, evidence, role
-5. Alignment — where human docs and code agree
-6. Gaps & drift — gap items as `category label` — explanation with paths
+3. Implementation signals — opened files with one-line roles (min 8 files; not directories)
+4. Integrations — table: system, evidence file paths, role
+5. Alignment — where human docs and code agree (concrete topics, not vague)
+6. Gaps — concrete findings only; full drift registry lives in drift.md
 
 Gap categories (translate labels into OUTPUT LANGUAGE, keep semantic meaning):
 - documented intent exists but not found in inspected code

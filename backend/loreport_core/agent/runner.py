@@ -20,6 +20,11 @@ from loreport_core.constants import (
     resolve_model_id,
     resolve_provider,
 )
+from loreport_core.doc_pattern import (
+    discover_repo_doc_patterns,
+    format_doc_patterns_block,
+    write_service_patterns,
+)
 from loreport_core.git import create_run_context, write_last_update_metadata
 from loreport_core.prompts import create_run_user_message, create_system_prompt
 from loreport_core.scope import (
@@ -185,6 +190,10 @@ async def run_loreport_agent(
     )
     use_dynamic = use_workflow and dynamic_workflow_enabled
 
+    doc_patterns = discover_repo_doc_patterns(repo_path, scope.service_names)
+    write_service_patterns(repo_path, doc_patterns, loreport_dir=loreport_dir)
+    doc_patterns_block = format_doc_patterns_block(doc_patterns, loreport_dir=loreport_dir)
+
     user_message = create_run_user_message(
         command,
         str(repo_path),
@@ -197,6 +206,7 @@ async def run_loreport_agent(
         affected_services=affected_services,
         max_parallel_subagents=max_parallel_subagents,
         update_max_passes=update_max_passes,
+        doc_patterns_block=doc_patterns_block,
     )
 
     before = create_loreport_content_snapshot(repo_path, loreport_dir)

@@ -104,17 +104,70 @@ select {
 
 .docs-layout {
   display: grid;
-  grid-template-columns: 220px 1fr;
+  grid-template-columns: 200px 1fr;
   gap: 1rem;
-  min-height: 360px;
+  min-height: 420px;
 }
 
 .docs-nav {
   display: flex;
   flex-direction: column;
-  gap: 0.35rem;
+  gap: 1rem;
   border-right: 1px solid #2a2f3a;
   padding-right: 0.75rem;
+}
+
+.docs-nav-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.docs-nav-title {
+  color: #6b7280;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 0 0.65rem;
+}
+
+.docs-main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.aspect-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-bottom: 0.75rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid #2a2f3a;
+}
+
+.aspect-tab {
+  background: #242936;
+  color: #cbd5e1;
+  border: 1px solid #2a2f3a;
+  border-radius: 999px;
+  padding: 0.35rem 0.75rem;
+  font-size: 0.85rem;
+}
+
+.aspect-tab.active {
+  background: #3b82f6;
+  border-color: #3b82f6;
+  color: #fff;
+}
+
+.aspect-tab.drift-tab:not(.active) {
+  border-color: #7f1d1d;
+  color: #fca5a5;
+}
+
+.service-link {
+  font-weight: 500;
 }
 
 .doc-link {

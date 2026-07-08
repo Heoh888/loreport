@@ -7,7 +7,11 @@ from loreport_core.constants import (
     resolve_language,
     resolve_model_id,
 )
-from loreport_core.integrity import GAP_FORMAT_RULES, SHALLOW_RESEARCH_FORBIDDEN
+from loreport_core.integrity import (
+    GAP_FORMAT_RULES,
+    INCOMPLETE_DOCS_CODE_DISCIPLINE,
+    SHALLOW_RESEARCH_FORBIDDEN,
+)
 from loreport_core.language import (
     SERVICE_PAGE_SECTIONS,
     output_language_policy,
@@ -35,8 +39,11 @@ Research notes are drafts for the main writer — still must be fully in OUTPUT 
 
 Epistemic model:
 - Human docs and code are evidence, not absolute truth.
-- You MUST inspect code: entrypoint, routers, consumers, config, models.
-- Read every file you reference in gaps or implementation signals.
+- Thin human docs mean read MORE code, not less — compare and find concrete gaps.
+- Compile aspect pages for UI completeness; human files remain canonical sources.
+- You MUST inspect code: entrypoint, routers, pages, consumers, config, models.
+
+{INCOMPLETE_DOCS_CODE_DISCIPLINE}
 
 {SERVICE_PAGE_SECTIONS}
 
@@ -45,10 +52,10 @@ Epistemic model:
 
 When called from eval workflow with responseSchema, also return:
 - serviceName — assigned service name
-- implementationPathCount — count of paths in readPathsInImplementation
-- readPathsInImplementation — repo-relative paths opened and listed
-- citedPathsInGaps — repo-relative local paths named in gap items
-- shallow — true if path count too low or citedPathsInGaps has unread paths
+- implementationPathCount — count of opened files in readPathsInImplementation (not dirs)
+- readPathsInImplementation — repo-relative files opened with read_file
+- citedPathsInGaps — repo-relative paths named in gap items
+- shallow — true if too few opened files or citedPaths not covered by opened files
 - markdownNotes — full research text in OUTPUT LANGUAGE
 - gapCount — number of gap items documented
 
@@ -56,7 +63,8 @@ Rules:
 - Stay inside the assigned service directory unless tracing a named integration.
 - Do not read secrets or .env files.
 - Do not write to {loreport_dir}/.
-- citedPathsInGaps must be a subset of readPathsInImplementation.
+- readPathsInImplementation must list opened files; directories alone are invalid.
+- citedPathsInGaps must be covered by opened files in readPathsInImplementation.
 """.strip()
 
 

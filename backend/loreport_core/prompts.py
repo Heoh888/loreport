@@ -7,7 +7,17 @@ from loreport_core.constants import (
     resolve_language,
 )
 from loreport_core.git.evidence import RunContext, UpdateMetadata
-from loreport_core.integrity import GAP_FORMAT_RULES, SHALLOW_PAGE_FORBIDDEN, format_service_task_hints
+from loreport_core.doc_pattern import (
+    COMPILED_ASPECT_RULES,
+    DRIFT_FILE_RULES,
+    SERVICE_FOLDER_LAYOUT,
+)
+from loreport_core.integrity import (
+    GAP_FORMAT_RULES,
+    INCOMPLETE_DOCS_CODE_DISCIPLINE,
+    SHALLOW_PAGE_FORBIDDEN,
+    format_service_task_hints,
+)
 from loreport_core.language import (
     SERVICE_PAGE_SECTIONS,
     output_language_policy,
@@ -73,6 +83,8 @@ Epistemic model (critical):
 - Human docs (`tech.docs/`, `docs/`, README, ADR, runbooks) express **intent and context**: what the team cares about, what to look at, boundaries, terminology. Teams write them differently — that is normal.
 - Source code expresses **current implementation**: what exists today in files, configs, routes, queues.
 - Documentation may describe features not yet implemented. Code may exist without any human doc.
+- **Incomplete human docs require deeper code research** — read code to map reality, then compare.
+- Loreport does not excuse thin README with directory inventory; open entrypoints and source files.
 - Loreport synthesizes both: what is documented, what is implemented, what aligns, what diverges, what is missing.
 - Do not invent files, modules, APIs, or behavior. Ground claims in inspected docs, code, or git evidence.
 - Do not declare "this is how it works" without code evidence. Do not declare "this is the design" without a human-doc reference.
@@ -90,32 +102,42 @@ Run discipline:
 - Prefer grep and short targeted reads over full-file reads when files are large.
 
 Human documentation discipline:
-- Before researching a service, find its local docs: README, `tech.docs/`, `docs/`, ADRs. Read them for **navigation and intent**, not as infallible truth.
-- Use human docs to learn what the team considers important — which queues, APIs, flows, and boundaries to inspect in code.
-- If a service has rich `tech.docs/`, do NOT rewrite it in {loreport_dir}/. Link to it and add only cross-service platform context plus integrity notes.
-- If human docs conflict with code, document the divergence explicitly. Do not silently pick one side.
+- Before researching a service, find its local docs: README, `tech.docs/`, `docs/`, ADRs.
+- Human docs are navigation hints — if they are thin, read more code, not less.
+- Use human docs to learn what the team considers important, then verify in source files.
+- If a service has rich `tech.docs/`, compile aspect pages — summarize intent in UI, keep human files as canonical source.
+- If human docs conflict with code, record in `drift.md` with severity and file evidence.
+- Gap "found in code, not in human docs" requires naming specific features from opened files.
+
+{INCOMPLETE_DOCS_CODE_DISCIPLINE}
+
+{SERVICE_FOLDER_LAYOUT.format(loreport_dir=loreport_dir)}
+
+{COMPILED_ASPECT_RULES.format(loreport_dir=loreport_dir)}
+
+{DRIFT_FILE_RULES.format(loreport_dir=loreport_dir)}
 
 Monorepo discipline:
-- Discover top-level services with `ls /` first. Typical signs: `*-service/`, `*-worker/`, `gateway/`, each with its own README or Dockerfile.
-- Inventory every `tech.docs/` tree before writing.
-- {loreport_dir}/quickstart.md is a **platform navigation hub** and integrity overview, not a replacement for service-local docs.
+- Discover top-level services with `ls /` first. Typical signs: `*-service/`, `*-worker/`, `gateway/`.
+- Read each service `_pattern.json` before writing — follow discovered human-doc aspects.
+- {loreport_dir}/quickstart.md is platform navigation hub with links to every `services/<name>/index.md`.
 - Prefer this layout:
-  - `{loreport_dir}/quickstart.md` — platform entrypoint, every service listed, gap summary
-  - `{loreport_dir}/platform/*.md` — cross-service architecture, integration maps (mermaid when useful)
-  - `{loreport_dir}/services/<service-name>.md` — integrity page per service (see template below)
+  - `{loreport_dir}/quickstart.md` — platform entrypoint, every service listed, drift summary
+  - `{loreport_dir}/platform/*.md` — cross-service architecture, integration maps
+  - `{loreport_dir}/services/<service-name>/` — folder per service (index, drift, aspect files)
 - Every discovered top-level service must appear in quickstart. Do not skip services silently.
 
-Service page template (`{loreport_dir}/services/<name>.md`):
+Compiled page quality (reference):
 {SERVICE_PAGE_SECTIONS}
 - For mermaid diagrams: use quoted node labels like `A["/api/sync"]`, never parallelogram `[/path/]`
 
 Quality bar:
-- A service page is INADEQUATE if Implementation signals lacks concrete file paths from code.
-- A service page is INADEQUATE if Gaps & drift names local paths absent from Implementation signals.
-- A service page is INADEQUATE if ANY section is in the wrong language — rewrite the whole page.
-- If you cite a path in gaps, you must have read it in this run and listed it in Implementation signals.
-- Integrations must be a table with evidence paths, not a bare name list.
-- Platform pages must show how services connect, not just what each service does in isolation.
+- A service folder is INADEQUATE if aspect pages are link-only without intent summary + code status.
+- A service folder is INADEQUATE if drift.md is empty but code/human mismatches exist.
+- A service folder is INADEQUATE if aspect files ignore `_pattern.json` layout.
+- A compiled aspect is INADEQUATE if fewer than 5 opened source files when code exists.
+- A compiled aspect is INADEQUATE if Implementation status lacks opened file evidence.
+- Prose must be entirely in OUTPUT LANGUAGE.
 
 {GAP_FORMAT_RULES}
 
@@ -165,14 +187,15 @@ def _mode_instructions(command: LoreportCommand, loreport_dir: str, language: st
 - This is an initial documentation run.
 - Build the integrity map from scratch under {loreport_dir}/.
 - Step 1: inventory all top-level services and every `tech.docs/` / README tree.
-- Step 2: for EACH service, create `{loreport_dir}/services/<name>.md` (all sections in {label}).
+- Step 2: for EACH service, read `_pattern.json` and write `{loreport_dir}/services/<name>/` folder
+  (index.md, drift.md, every aspect file from pattern — all in {label}).
 - Step 3: synthesize `{loreport_dir}/quickstart.md` and `{loreport_dir}/platform/`.
 - End quickstart with a platform-wide gaps section (heading in {label}).
 - Use up to 12 pages for monorepos; up to 8 for small single-service repositories.
 """.strip()
     return f"""
 - This is a maintenance update run.
-- Read existing `{loreport_dir}/` pages before editing (read_file each affected .md).
+- Read existing `{loreport_dir}/services/<name>/` folders before editing.
 - Use git diff and last update metadata to find affected services and files.
 - Rewrite edited pages entirely in {label} — fix mixed-language pages you touch.
 - If a page mixes languages, translate the full page to {label}, not only changed lines.
@@ -211,7 +234,7 @@ Run this workflow:
    Run up to {max_parallel} tasks in parallel per batch until every service is covered.
 2. Review results: if any service lacks ≥5 code paths, re-dispatch or research it yourself.
 3. After all service notes are collected, call `platform-writer` once with the combined notes.
-4. Write every `{loreport_dir}/services/<name>.md` in OUTPUT LANGUAGE — rewrite subagent notes.
+4. Write every `{loreport_dir}/services/<name>/` folder from results — index, drift, aspect files.
 5. Write `{loreport_dir}/quickstart.md` and `{loreport_dir}/platform/` from the synthesis.
 6. End quickstart with platform-wide gaps section (in OUTPUT LANGUAGE).
 
@@ -260,7 +283,7 @@ def _workflow_update_block(
 Run this workflow:
 1. For EACH affected service, call `task` with subagent `service-researcher`
    (up to {max_parallel} parallel).
-2. Update only `{loreport_dir}/services/<name>.md` for affected services.
+2. Update only `{loreport_dir}/services/<name>/` folders for affected services.
 3. Refresh platform pages and quickstart gaps section if cross-service integrations changed.
 4. Loop up to {update_max_passes} passes if a subagent reports cross-cutting impact
    beyond the initial list.
@@ -288,6 +311,7 @@ def create_user_prompt(
     affected_services: tuple[str, ...] = (),
     max_parallel_subagents: int = 5,
     update_max_passes: int = 3,
+    doc_patterns_block: str = "",
 ) -> str:
     doc_language = resolve_language(language)
     lang_policy = output_language_policy(doc_language)
@@ -306,8 +330,9 @@ Start with per-service integrity pages, then synthesize {loreport_dir}/quickstar
 Integrity requirements:
 - Neither human docs nor code is absolute truth. Document both and mark gaps explicitly.
 - Use team-authored docs (`tech.docs/`, README) to know what to inspect — not as infallible spec.
-- Every top-level service gets a `{loreport_dir}/services/<name>.md` page — fully in OUTPUT LANGUAGE.
-- Link to existing human docs instead of rewriting them.
+- Every top-level service gets `{loreport_dir}/services/<name>/` folder per `_pattern.json`.
+- Compile aspect pages: human intent summary + code verification — full UI readability.
+- Record all drifts in `drift.md` by severity; human docs stay canonical on disk.
 - Platform quickstart must list every service and summarize platform-wide gaps.
 
 Git context:
@@ -317,7 +342,7 @@ Git context:
         prompt = f"""
 Update the Loreport integrity map for this repository.
 
-Read each affected `{loreport_dir}/services/*.md` with read_file before editing.
+Read each affected `{loreport_dir}/services/<name>/` folder with read_file before editing.
 Identify recent changes from git and refresh affected integrity pages.
 Fix mixed-language pages you touch — rewrite the full page in OUTPUT LANGUAGE.
 If the map is already current, do not edit files.{lang_note}
@@ -353,6 +378,9 @@ Git change summary:
     elif scope and scope.services:
         prompt += f"\n\nPre-discovered services:\n{format_service_inventory(scope)}"
 
+    if doc_patterns_block:
+        prompt += f"\n\nDiscovered human-doc patterns (follow exactly):\n{doc_patterns_block}"
+
     return prompt
 
 
@@ -369,6 +397,7 @@ def create_run_user_message(
     affected_services: tuple[str, ...] = (),
     max_parallel_subagents: int = 5,
     update_max_passes: int = 3,
+    doc_patterns_block: str = "",
 ) -> str:
     base = create_user_prompt(
         command,
@@ -381,6 +410,7 @@ def create_run_user_message(
         affected_services=affected_services,
         max_parallel_subagents=max_parallel_subagents,
         update_max_passes=update_max_passes,
+        doc_patterns_block=doc_patterns_block,
     )
     return f"""
 {base}
