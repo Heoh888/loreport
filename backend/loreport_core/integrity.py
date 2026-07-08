@@ -31,12 +31,12 @@ Gaps & drift format (strict):
 
 SHALLOW_PAGE_FORBIDDEN = """
 FORBIDDEN on published service pages:
-- Implementation signals listing directories without opened files (src/, pages/, app/)
-- Gaps naming local paths absent from Implementation signals
-- Gaps whose purpose is to excuse missing code inspection instead of stating a finding
-- Implementation signals with fewer than 5 opened files (when source exists)
-- Bare gap labels without explanation
-- Integrations as bullets without evidence paths
+- Aspect pages that are mostly repo paths or "## Открытые файлы" sections
+- Intent with one generic paragraph and no concrete endpoints/queues/entities
+- Verification table with one "совпадает" row per file instead of per claim
+- index.md duplicating aspect bodies or listing 15+ implementation paths
+- English headings or gap labels when OUTPUT LANGUAGE is not English
+- Gaps naming local paths without opened-file evidence
 - Prose in a language other than OUTPUT LANGUAGE
 """.strip()
 
@@ -129,9 +129,9 @@ Mandatory code research:
 6. Open every file you cite in gaps or Implementation signals
 
 Return compiled research per _pattern.json aspects:
-- overview/index, drift by severity, one block per aspect loreport file
-- Intent summary from human docs + implementation status with opened files
-- Min {MIN_SOURCE_FILE_PATHS_TARGET} opened files; citedPathsInGaps covered by files
+- For each aspect: read_file human docs FIRST, extract concrete claims (endpoints, queues, entities)
+- overview/index: hub links only; drift: severity items with translated labels
+- Per-claim verification table, not per-file "aligned" shortcuts
 
 {GAP_FORMAT_RULES}
 {SHALLOW_RESEARCH_FORBIDDEN}

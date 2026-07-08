@@ -10,6 +10,7 @@ from loreport_core.git.evidence import RunContext, UpdateMetadata
 from loreport_core.doc_pattern import (
     COMPILED_ASPECT_RULES,
     DRIFT_FILE_RULES,
+    INDEX_FILE_RULES,
     SERVICE_FOLDER_LAYOUT,
 )
 from loreport_core.integrity import (
@@ -115,6 +116,8 @@ Human documentation discipline:
 
 {COMPILED_ASPECT_RULES.format(loreport_dir=loreport_dir)}
 
+{INDEX_FILE_RULES.format(loreport_dir=loreport_dir)}
+
 {DRIFT_FILE_RULES.format(loreport_dir=loreport_dir)}
 
 Monorepo discipline:
@@ -132,12 +135,13 @@ Compiled page quality (reference):
 - For mermaid diagrams: use quoted node labels like `A["/api/sync"]`, never parallelogram `[/path/]`
 
 Quality bar:
-- A service folder is INADEQUATE if aspect pages are link-only without intent summary + code status.
-- A service folder is INADEQUATE if drift.md is empty but code/human mismatches exist.
-- A service folder is INADEQUATE if aspect files ignore `_pattern.json` layout.
-- A compiled aspect is INADEQUATE if fewer than 5 opened source files when code exists.
-- A compiled aspect is INADEQUATE if Implementation status lacks opened file evidence.
-- Prose must be entirely in OUTPUT LANGUAGE.
+- INADEQUATE: aspect page with vague Intent and mostly file paths
+- INADEQUATE: Implementation table with one "совпадает" row per file instead of per claim
+- INADEQUATE: index.md with 15+ path bullets or duplicated aspect content
+- INADEQUATE: drift.md with English category labels or vague "нужно подтвердить"
+- INADEQUATE: aspect without reading human doc — Intent must quote concrete endpoints/queues/entities
+- REQUIRED: api-surface lists endpoints from curl-example; messaging lists queues from events doc
+- Prose and headings entirely in OUTPUT LANGUAGE
 
 {GAP_FORMAT_RULES}
 
@@ -331,7 +335,7 @@ Integrity requirements:
 - Neither human docs nor code is absolute truth. Document both and mark gaps explicitly.
 - Use team-authored docs (`tech.docs/`, README) to know what to inspect — not as infallible spec.
 - Every top-level service gets `{loreport_dir}/services/<name>/` folder per `_pattern.json`.
-- Compile aspect pages: human intent summary + code verification — full UI readability.
+- Compile aspect pages: extract concrete content FROM human docs, then verify each claim in code.
 - Record all drifts in `drift.md` by severity; human docs stay canonical on disk.
 - Platform quickstart must list every service and summarize platform-wide gaps.
 

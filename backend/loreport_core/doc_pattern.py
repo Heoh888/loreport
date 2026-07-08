@@ -32,6 +32,18 @@ DRIFT_FILE = "drift.md"
 PATTERN_FILE = "_pattern.json"
 
 
+ASPECT_CONTENT_HINTS: dict[str, str] = {
+    "api": "Extract endpoints from human doc into Intent table; verify each in routers.",
+    "messaging": "Extract queues/events/payloads from human doc; verify in consumer/schemas.",
+    "data-model": "Extract entities/relations from ER/spec; verify in models.",
+    "specification": "Extract architecture boundaries from spec; verify in entrypoint/modules.",
+    "operations": "Extract deploy/run steps; verify in Dockerfile/compose/config.",
+    "testing": "Extract test scenarios; verify in test files.",
+    "general": "Extract flows from plan docs; verify in named modules.",
+    "overview": "Short hub only — link to aspect pages, no file dump.",
+}
+
+
 class IncompleteLoreportError(RuntimeError):
     """Raised when service folders lack required compiled markdown files."""
 
@@ -217,9 +229,10 @@ def format_service_pattern_summary(
     ]
     for aspect in pattern.aspects:
         human = ", ".join(f"`{path}`" for path in aspect.human_files) or "code-first"
+        hint = ASPECT_CONTENT_HINTS.get(aspect.id, "Extract concrete claims from human docs.")
         lines.append(
-            f"  - `{pattern.loreport_dir}/{aspect.loreport_file}` — compiled `{aspect.label}` "
-            f"(human: {human})"
+            f"  - `{pattern.loreport_dir}/{aspect.loreport_file}` — `{aspect.label}` "
+            f"(human: {human}). {hint}"
         )
     return "\n".join(lines)
 
@@ -286,22 +299,50 @@ def format_incomplete_services_warning(missing: list[str]) -> str:
 
 
 COMPILED_ASPECT_RULES = """
-Compiled aspect page (`{loreport_dir}/services/<name>/<aspect>.md`):
-- Header: `> Source: <human-doc-path>` for each human file used
-- **Intent** — substantive summary of human doc sections (readable standalone in UI)
-- **Implementation status** — table: topic | code evidence (opened files) | aligned / drift
-- **Opened files** — list every source file read with read_file
-- Do NOT publish link-only pages — UI must show completeness, not a file list
+Compiled aspect page (`{loreport_dir}/services/<name>/<aspect>.md`) — full UI doc, NOT a path index.
+
+Write workflow per aspect:
+1. read_file every human file listed in _pattern.json for this aspect
+2. read_file code files needed to verify claims
+3. write compiled page with substance FROM human docs
+
+Required structure (ALL headings in OUTPUT LANGUAGE):
+- `> Источник: <human-path>` — provenance only
+- ## Замысел — concrete content extracted from human docs:
+  - api-surface: table method | path | назначение (from curl/openapi examples)
+  - messaging: table queue/event | payload | producer/consumer
+  - data-model: entities, fields, relations (from ER/spec)
+  - specification: sections: boundaries, modules, flows (from tech spec)
+  - Minimum 5 concrete rows/bullets sourced from human doc text
+- ## Сверка с кодом — one row per Intent claim (NOT per file):
+  | Заявление | Где в коде | Статус |
+  Статус: совпадает | расхождение | нет в коде | нет в документации
+- ## Детали — optional code-only findings (brief)
+
+FORBIDDEN on aspect pages:
+- Page that is mostly paths or "## Открытые файлы" as main body
+- Vague one-paragraph Intent without endpoints/queues/entities from human doc
+- Marking whole file "совпадает" without checking specific claims
+- English headings (# Api, # Messaging) when OUTPUT LANGUAGE is not English
+""".strip()
+
+INDEX_FILE_RULES = """
+index.md — short service hub (NOT a duplicate of all aspects):
+- ## Назначение — one paragraph
+- ## Разделы документации — links to sibling aspect .md in same folder
+- ## Интеграции — compact cross-service table
+- ## Критичные расхождения — top items with link to drift.md
+FORBIDDEN on index.md: long file inventories, duplicating aspect Intent tables.
 """.strip()
 
 DRIFT_FILE_RULES = """
 Drift registry (`{loreport_dir}/services/<name>/drift.md`):
-- Sections: ## Critical, ## Warning, ## Info (translate headings to OUTPUT LANGUAGE)
-- Each item: category label — explanation with human source + code evidence paths
-- Critical: broken contract, missing documented API/queue, spec/code conflict on core flow
-- Warning: undocumented code feature, partial mismatch, missing human doc for real behavior
-- Info: navigation gaps, stale wording, non-blocking inconsistencies
-- Code is ground truth for implementation; human docs are ground truth for intent
+- Sections in OUTPUT LANGUAGE: ## Критично, ## Предупреждение, ## Информация
+- Each item: `категория на OUTPUT LANGUAGE` — конкретное расхождение: цитата/тема из human doc +
+  конкретное место в коде + что не сходится
+- Gap category labels MUST be translated — never English labels in Russian pages
+- FORBIDDEN: vague "нужно подтвердить в main.py" when main.py was read; vague navigation-only items
+- Code = implementation truth; human docs = intent truth
 """.strip()
 
 SERVICE_FOLDER_LAYOUT = """

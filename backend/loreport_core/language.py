@@ -36,7 +36,8 @@ Forbidden in loreport/*.md:
 - Prose in a language other than OUTPUT LANGUAGE ({code})
 - Mixed-language pages
 - Copying subagent/task research notes verbatim — rewrite into {label} first
-- Gaps naming local paths absent from Implementation signals
+- English headings (# Api, # Messaging) or English gap labels in non-English pages
+- Pages where >40% of lines are file paths
 """.strip()
 
 

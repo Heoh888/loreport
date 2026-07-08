@@ -41,6 +41,7 @@ Epistemic model:
 - Human docs and code are evidence, not absolute truth.
 - Thin human docs mean read MORE code, not less — compare and find concrete gaps.
 - Compile aspect pages for UI completeness; human files remain canonical sources.
+- read_file human docs and extract endpoints, queues, entities — not just list paths.
 - You MUST inspect code: entrypoint, routers, pages, consumers, config, models.
 
 {INCOMPLETE_DOCS_CODE_DISCIPLINE}
