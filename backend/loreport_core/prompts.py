@@ -6,13 +6,15 @@ from loreport_core.constants import (
     language_label,
     resolve_language,
 )
-from loreport_core.git.evidence import RunContext, UpdateMetadata
 from loreport_core.doc_pattern import (
     COMPILED_ASPECT_RULES,
     DRIFT_FILE_RULES,
     INDEX_FILE_RULES,
     SERVICE_FOLDER_LAYOUT,
+    ServiceDocPattern,
+    format_service_completion_block,
 )
+from loreport_core.git.evidence import RunContext, UpdateMetadata
 from loreport_core.integrity import (
     GAP_FORMAT_RULES,
     INCOMPLETE_DOCS_CODE_DISCIPLINE,
@@ -106,7 +108,7 @@ Human documentation discipline:
 - Before researching a service, find its local docs: README, `tech.docs/`, `docs/`, ADRs.
 - Human docs are navigation hints — if they are thin, read more code, not less.
 - Use human docs to learn what the team considers important, then verify in source files.
-- If a service has rich `tech.docs/`, compile aspect pages — summarize intent in UI, keep human files as canonical source.
+- If a service has rich `tech.docs/`, pages are pre-compiled with full human doc text in UI.
 - If human docs conflict with code, record in `drift.md` with severity and file evidence.
 - Gap "found in code, not in human docs" requires naming specific features from opened files.
 
@@ -114,7 +116,7 @@ Human documentation discipline:
 
 {SERVICE_FOLDER_LAYOUT.format(loreport_dir=loreport_dir)}
 
-{COMPILED_ASPECT_RULES.format(loreport_dir=loreport_dir)}
+{COMPILED_ASPECT_RULES}
 
 {INDEX_FILE_RULES.format(loreport_dir=loreport_dir)}
 
@@ -135,13 +137,13 @@ Compiled page quality (reference):
 - For mermaid diagrams: use quoted node labels like `A["/api/sync"]`, never parallelogram `[/path/]`
 
 Quality bar:
-- INADEQUATE: aspect page with vague Intent and mostly file paths
-- INADEQUATE: Implementation table with one "совпадает" row per file instead of per claim
-- INADEQUATE: index.md with 15+ path bullets or duplicated aspect content
-- INADEQUATE: drift.md with English category labels or vague "нужно подтвердить"
-- INADEQUATE: aspect without reading human doc — Intent must quote concrete endpoints/queues/entities
-- REQUIRED: api-surface lists endpoints from curl-example; messaging lists queues from events doc
-- Prose and headings entirely in OUTPUT LANGUAGE
+- INADEQUATE: rewriting or shortening human-doc section (between human-doc markers)
+- INADEQUATE: verification rows checking file existence instead of specific claims
+- INADEQUATE: index.md with one-paragraph summary instead of full README transclusion
+- INADEQUATE: drift.md with vague confirmation gaps when cited files were read
+- REQUIRED: keep human doc body intact; fill code-verification table with claims from human doc
+- REQUIRED: api-surface verifies each endpoint from human doc; messaging each queue/event
+- Prose in verification/drift sections entirely in OUTPUT LANGUAGE
 
 {GAP_FORMAT_RULES}
 
@@ -189,13 +191,11 @@ def _mode_instructions(command: LoreportCommand, loreport_dir: str, language: st
     if command == "init":
         return f"""
 - This is an initial documentation run.
-- Build the integrity map from scratch under {loreport_dir}/.
-- Step 1: inventory all top-level services and every `tech.docs/` / README tree.
-- Step 2: for EACH service, read `_pattern.json` and write `{loreport_dir}/services/<name>/` folder
-  (index.md, drift.md, every aspect file from pattern — all in {label}).
+- Human docs are PRE-COMPILED into `{loreport_dir}/services/<name>/*.md` before you start.
+- Step 1: for EACH service, read pre-compiled aspect pages — human-doc section is canonical.
+- Step 2: read code and edit_file ONLY verification/drift/integrations sections — do NOT rewrite human doc body.
 - Step 3: synthesize `{loreport_dir}/quickstart.md` and `{loreport_dir}/platform/`.
 - End quickstart with a platform-wide gaps section (heading in {label}).
-- Use up to 12 pages for monorepos; up to 8 for small single-service repositories.
 """.strip()
     return f"""
 - This is a maintenance update run.
@@ -238,9 +238,9 @@ Run this workflow:
    Run up to {max_parallel} tasks in parallel per batch until every service is covered.
 2. Review results: if any service lacks ≥5 code paths, re-dispatch or research it yourself.
 3. After all service notes are collected, call `platform-writer` once with the combined notes.
-4. Write every `{loreport_dir}/services/<name>/` folder from results — index, drift, aspect files.
+4. For EACH service: read pre-compiled `{loreport_dir}/services/<name>/*.md` pages.
+   edit_file ONLY code-verification, details, drift.md, integrations — keep human-doc section intact.
 5. Write `{loreport_dir}/quickstart.md` and `{loreport_dir}/platform/` from the synthesis.
-6. End quickstart with platform-wide gaps section (in OUTPUT LANGUAGE).
 
 Per-service task descriptions:
 {task_hints}
@@ -327,23 +327,20 @@ def create_user_prompt(
         prompt = f"""
 Initialize Loreport integrity documentation for this repository.
 
-Inspect human docs for navigation context, then verify implementation signals in code.
-Write the initial map under {loreport_dir}/.
-Start with per-service integrity pages, then synthesize {loreport_dir}/quickstart.md.{lang_note}
+Human docs from `tech.docs/` and README are ALREADY transcluded into
+`{loreport_dir}/services/<name>/*.md` under `<!-- loreport:section:human-doc -->`.
+Your job: verify claims in code and fill verification/drift sections — NOT rewrite human docs.{lang_note}
 
 Integrity requirements:
-- Neither human docs nor code is absolute truth. Document both and mark gaps explicitly.
-- Use team-authored docs (`tech.docs/`, README) to know what to inspect — not as infallible spec.
-- Every top-level service gets `{loreport_dir}/services/<name>/` folder per `_pattern.json`.
-- Compile aspect pages: extract concrete content FROM human docs, then verify each claim in code.
-- Record all drifts in `drift.md` by severity; human docs stay canonical on disk.
-- Platform quickstart must list every service and summarize platform-wide gaps.
+- human-doc section is canonical team text — preserve it verbatim.
+- Read claims from that section, verify each in code, fill code-verification table.
+- Record drifts in `drift.md` by severity with concrete paths.
+- Write `{loreport_dir}/quickstart.md` and `{loreport_dir}/platform/` after service verification.
 
 INIT COMPLETION (mandatory):
-- `_pattern.json` is pre-generated — you MUST write every required `.md` file listed in patterns.
-- For EACH service: `index.md`, `drift.md`, and every aspect file from the pattern block below.
-- Also write `{loreport_dir}/quickstart.md` and `{loreport_dir}/platform/` when ready.
-- A folder with only `_pattern.json` is a FAILED run — keep writing until all markdown files exist.
+- Every service folder must have index.md, drift.md, and all aspect files from _pattern.json.
+- Missing files may be re-generated from human docs — fill their verification sections.
+- Do NOT replace full human doc bodies with summaries.
 
 Git context:
 {context.git_summary}
@@ -392,6 +389,96 @@ Git change summary:
         prompt += f"\n\nDiscovered human-doc patterns (follow exactly):\n{doc_patterns_block}"
 
     return prompt
+
+
+def create_completion_user_message(
+    repo_path: str,
+    *,
+    loreport_dir: str = LOREPORT_DIR,
+    language: str | None = None,
+    missing_by_service: dict[str, list[str]],
+    patterns: dict[str, ServiceDocPattern],
+    pass_number: int,
+    max_passes: int,
+) -> str:
+    doc_language = resolve_language(language)
+    lang_policy = output_language_policy(doc_language)
+    blocks = [
+        format_service_completion_block(
+            service_name,
+            missing_files,
+            patterns.get(service_name),
+            loreport_dir=loreport_dir,
+        )
+        for service_name, missing_files in missing_by_service.items()
+    ]
+    service_list = ", ".join(missing_by_service)
+    return f"""
+Completion pass {pass_number}/{max_passes} — required markdown still missing.
+
+Missing files were re-generated from human docs where possible.
+Your job: ensure files exist AND fill code-verification / drift.md.
+Do NOT rewrite human-doc section — it contains full team documentation.
+
+Services to complete: {service_list}
+{lang_policy}
+
+{chr(10).join(blocks)}
+
+Repository root:
+{repo_path}
+
+Runtime note:
+- Pre-compiled pages use virtual paths under /{loreport_dir}/services/<name>/.
+- edit_file verification sections; preserve human-doc markers.
+- Do not stop until every missing file above exists on disk.
+""".strip()
+
+
+def create_convergence_user_message(
+    repo_path: str,
+    *,
+    loreport_dir: str = LOREPORT_DIR,
+    language: str | None = None,
+    targets_block: str,
+    pass_number: int,
+    max_passes: int,
+    open_items: int,
+    stalled: bool,
+) -> str:
+    doc_language = resolve_language(language)
+    lang_policy = output_language_policy(doc_language)
+    stall_note = (
+        "Previous pass made no progress — read deeper in code and close remaining items."
+        if stalled
+        else "Each pass closes only items listed below — do not re-verify completed rows."
+    )
+    return f"""
+Verification convergence pass {pass_number}/{max_passes} — iterate-until-convergence.
+
+Open verification items: {open_items}
+{stall_note}
+
+Workflow:
+1. read_file only the listed service pages
+2. read_file code for pending claims
+3. edit_file ONLY `<!-- loreport:verification:pending -->` block and drift.md
+4. Do NOT touch `<!-- loreport:human-doc:do-not-edit -->`
+5. Replace shallow rows (file-existence checks) with specific claims from human doc
+6. Status values in OUTPUT LANGUAGE; replace `loreport:pending` when verified
+
+{lang_policy}
+
+{targets_block}
+
+Repository root:
+{repo_path}
+
+Runtime note:
+- Do not run map-reduce workflow on this pass.
+- Verify only pending claims from the list above.
+- Run stops automatically when no `loreport:pending` statuses remain.
+""".strip()
 
 
 def create_run_user_message(

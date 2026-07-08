@@ -26,10 +26,17 @@ from loreport_core.doc_pattern import (
     find_incomplete_service_folders,
     format_doc_patterns_block,
     format_incomplete_services_warning,
+    group_missing_by_service,
     write_service_patterns,
 )
 from loreport_core.git import create_run_context, write_last_update_metadata
-from loreport_core.prompts import create_run_user_message, create_system_prompt
+from loreport_core.human_doc_compile import write_compiled_drafts
+from loreport_core.prompts import (
+    create_completion_user_message,
+    create_convergence_user_message,
+    create_run_user_message,
+    create_system_prompt,
+)
 from loreport_core.scope import (
     RepoScope,
     affected_services_from_paths,
@@ -38,6 +45,12 @@ from loreport_core.scope import (
 )
 from loreport_core.snapshot import create_loreport_content_snapshot
 from loreport_core.types import LoreportCommand
+from loreport_core.verification_convergence import (
+    count_open_verification_items,
+    find_pending_verification_targets,
+    format_convergence_targets_block,
+    verification_progress_snapshot,
+)
 
 if TYPE_CHECKING:
     from langchain.agents.middleware.types import AgentMiddleware
@@ -46,6 +59,8 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_MAX_PARALLEL_SUBAGENTS = 5
 DEFAULT_UPDATE_MAX_PASSES = 3
+DEFAULT_INIT_COMPLETION_PASSES = 3
+DEFAULT_VERIFICATION_CONVERGENCE_PASSES = 5
 UPDATE_WORKFLOW_SERVICE_THRESHOLD = 3
 
 
@@ -162,6 +177,8 @@ async def run_loreport_agent(
     max_parallel_subagents: int = DEFAULT_MAX_PARALLEL_SUBAGENTS,
     subagent_model_id: str | None = None,
     update_max_passes: int = DEFAULT_UPDATE_MAX_PASSES,
+    init_completion_passes: int = DEFAULT_INIT_COMPLETION_PASSES,
+    verification_convergence_passes: int = DEFAULT_VERIFICATION_CONVERGENCE_PASSES,
 ) -> bool:
     """Run init/update agent. Returns True if lore content changed."""
     repo_path = repo_path.resolve()
@@ -213,6 +230,14 @@ async def run_loreport_agent(
 
     before = create_loreport_content_snapshot(repo_path, loreport_dir)
     write_service_patterns(repo_path, doc_patterns, loreport_dir=loreport_dir)
+    drafts_written = write_compiled_drafts(
+        repo_path,
+        doc_patterns,
+        loreport_dir=loreport_dir,
+        language=resolved_language,
+        only_missing=command != "init",
+    )
+    logger.info("Pre-compiled %d service markdown drafts from human docs", drafts_written)
 
     await asyncio.to_thread(
         _run_agent_sync,
@@ -229,10 +254,125 @@ async def run_loreport_agent(
         subagent_model_id=subagent_model_id,
     )
 
+    missing = find_incomplete_service_folders(repo_path, loreport_dir=loreport_dir)
+    if missing and command == "init" and init_completion_passes > 0:
+        for pass_number in range(1, init_completion_passes + 1):
+            missing_by_service = group_missing_by_service(missing)
+            if not missing_by_service:
+                break
+            warning = format_incomplete_services_warning(missing)
+            logger.warning(
+                "Init completion pass %d/%d — %s",
+                pass_number,
+                init_completion_passes,
+                warning,
+            )
+            write_compiled_drafts(
+                repo_path,
+                {
+                    name: doc_patterns[name]
+                    for name in missing_by_service
+                    if name in doc_patterns
+                },
+                loreport_dir=loreport_dir,
+                language=resolved_language,
+                only_missing=True,
+            )
+            completion_message = create_completion_user_message(
+                str(repo_path),
+                loreport_dir=loreport_dir,
+                language=resolved_language,
+                missing_by_service=missing_by_service,
+                patterns=doc_patterns,
+                pass_number=pass_number,
+                max_passes=init_completion_passes,
+            )
+            await asyncio.to_thread(
+                _run_agent_sync,
+                command=command,
+                repo_path=repo_path,
+                loreport_dir=loreport_dir,
+                provider=resolved_provider,
+                model_id=resolved_model,
+                user_message=completion_message,
+                language=resolved_language,
+                scope=scope,
+                use_workflow=False,
+                dynamic_workflow=False,
+                subagent_model_id=subagent_model_id,
+            )
+            missing = find_incomplete_service_folders(repo_path, loreport_dir=loreport_dir)
+            if not missing:
+                break
+
+    if command == "init" and verification_convergence_passes > 0 and not missing:
+        prev_snapshot: frozenset[str] | None = None
+        for pass_number in range(1, verification_convergence_passes + 1):
+            targets = find_pending_verification_targets(
+                repo_path,
+                doc_patterns,
+                loreport_dir=loreport_dir,
+                language=resolved_language,
+            )
+            if not targets:
+                logger.info("Verification converged before pass %d", pass_number)
+                break
+
+            open_items = count_open_verification_items(targets)
+            current_snapshot = verification_progress_snapshot(targets)
+            stalled = (
+                prev_snapshot is not None and current_snapshot == prev_snapshot
+            )
+            logger.info(
+                "Verification convergence pass %d/%d — open_items=%d stalled=%s",
+                pass_number,
+                verification_convergence_passes,
+                open_items,
+                stalled,
+            )
+
+            convergence_message = create_convergence_user_message(
+                str(repo_path),
+                loreport_dir=loreport_dir,
+                language=resolved_language,
+                targets_block=format_convergence_targets_block(
+                    targets,
+                    loreport_dir=loreport_dir,
+                ),
+                pass_number=pass_number,
+                max_passes=verification_convergence_passes,
+                open_items=open_items,
+                stalled=stalled,
+            )
+            await asyncio.to_thread(
+                _run_agent_sync,
+                command=command,
+                repo_path=repo_path,
+                loreport_dir=loreport_dir,
+                provider=resolved_provider,
+                model_id=resolved_model,
+                user_message=convergence_message,
+                language=resolved_language,
+                scope=scope,
+                use_workflow=False,
+                dynamic_workflow=False,
+                subagent_model_id=subagent_model_id,
+            )
+
+            next_targets = find_pending_verification_targets(
+                repo_path,
+                doc_patterns,
+                loreport_dir=loreport_dir,
+                language=resolved_language,
+            )
+            if not next_targets:
+                logger.info("Verification converged after pass %d", pass_number)
+                break
+            prev_snapshot = verification_progress_snapshot(next_targets)
+
     after = create_loreport_content_snapshot(repo_path, loreport_dir)
     changed = before != after
 
-    missing = find_incomplete_service_folders(repo_path, loreport_dir=loreport_dir)
     if missing:
         warning = format_incomplete_services_warning(missing)
         logger.error("%s", warning)

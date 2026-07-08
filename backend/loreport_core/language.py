@@ -30,7 +30,12 @@ Everything written to loreport/*.md must be entirely in {label}:
 section headings, table headers, table body, gap labels, gap explanations, bullets, prose.
 
 Only keep as-is: file paths, directory names, env vars, API route strings, code identifiers,
+HTML loreport markers (`<!-- loreport:... -->`), slug headings until you translate them,
 and short literal quotes from source files.
+
+Pre-compiled pages use slug headings (`human-doc`, `code-verification`,
+table cols `claim|code|status`).
+Translate slugs to {label} when you edit_file — keep markers unchanged.
 
 Forbidden in loreport/*.md:
 - Prose in a language other than OUTPUT LANGUAGE ({code})

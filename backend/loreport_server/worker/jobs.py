@@ -57,6 +57,7 @@ async def process_job(payload: SyncJobPayload) -> None:
             max_parallel_subagents=settings.loreport_max_parallel_subagents,
             subagent_model_id=settings.loreport_subagent_model_id,
             update_max_passes=settings.loreport_update_max_passes,
+            verification_convergence_passes=settings.loreport_verification_convergence_passes,
         )
         logger.info("Agent finished job=%s changed=%s", job_id, changed)
     except Exception as exc:  # noqa: BLE001

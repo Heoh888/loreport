@@ -332,16 +332,16 @@ def format_eval_workflow_block(
 ) -> str:
     lang_policy = output_language_policy(language)
     action = (
-        "Write or update loreport/services/<name>/ folders from results — "
-        "index.md, drift.md, and aspect files; then quickstart and platform."
+        "Read pre-compiled loreport/services/<name>/*.md (human docs already transcluded). "
+        "edit_file verification and drift sections only; then quickstart and platform."
         if command == "init"
-        else "Update only affected loreport/services/<name>/ folders from results."
+        else "Update verification/drift sections in affected loreport/services/<name>/ folders."
     )
     shallow_rule = (
-        "5. For services in shallowServices or with stillShallow=true: BEFORE write_file, "
-        "read_file entrypoint, routes, and every cited path. "
-        "Implementation signals must list opened files only — not directories.\n"
-        "6. VERIFY every required file from _pattern.json exists via write_file before ending the run."
+        "5. For services in shallowServices or with stillShallow=true: read entrypoint, routes, "
+        "and every cited path before editing verification.\n"
+        "6. NEVER rewrite human-doc section — only fill code-verification and drift.md.\n"
+        "7. VERIFY every required file from _pattern.json exists before ending the run."
     )
     return f"""
 Deterministic workflow (Eval map-reduce):

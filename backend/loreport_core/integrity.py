@@ -31,13 +31,11 @@ Gaps & drift format (strict):
 
 SHALLOW_PAGE_FORBIDDEN = """
 FORBIDDEN on published service pages:
-- Aspect pages that are mostly repo paths or "## Открытые файлы" sections
-- Intent with one generic paragraph and no concrete endpoints/queues/entities
-- Verification table with one "совпадает" row per file instead of per claim
-- index.md duplicating aspect bodies or listing 15+ implementation paths
+- Rewriting or shortening human-doc section (human-doc markers are pre-compiled)
+- Verification rows that check file/module existence instead of specific claims
+- Replacing full tech.docs content with bullet summary
 - English headings or gap labels when OUTPUT LANGUAGE is not English
 - Gaps naming local paths without opened-file evidence
-- Prose in a language other than OUTPUT LANGUAGE
 """.strip()
 
 SHALLOW_RESEARCH_FORBIDDEN = """

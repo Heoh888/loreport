@@ -951,7 +951,7 @@ wheels = [
 
 [[package]]
 name = "loreport"
-version = "0.2.2"
+version = "0.2.5"
 source = { editable = "." }
 dependencies = [
     { name = "aiosqlite" },

@@ -33,14 +33,14 @@ PATTERN_FILE = "_pattern.json"
 
 
 ASPECT_CONTENT_HINTS: dict[str, str] = {
-    "api": "Extract endpoints from human doc into Intent table; verify each in routers.",
-    "messaging": "Extract queues/events/payloads from human doc; verify in consumer/schemas.",
-    "data-model": "Extract entities/relations from ER/spec; verify in models.",
-    "specification": "Extract architecture boundaries from spec; verify in entrypoint/modules.",
-    "operations": "Extract deploy/run steps; verify in Dockerfile/compose/config.",
-    "testing": "Extract test scenarios; verify in test files.",
-    "general": "Extract flows from plan docs; verify in named modules.",
-    "overview": "Short hub only — link to aspect pages, no file dump.",
+    "api": "Human doc pre-compiled; verify each endpoint/path claim in routers.",
+    "messaging": "Human doc pre-compiled; verify each queue/event claim in consumer/schemas.",
+    "data-model": "Human doc pre-compiled; verify each entity/relation in models.",
+    "specification": "Human doc pre-compiled; verify architecture claims in entrypoint/modules.",
+    "operations": "Human doc pre-compiled; verify deploy/run steps in Dockerfile/compose.",
+    "testing": "Human doc pre-compiled; verify test scenarios in test files.",
+    "general": "Human doc pre-compiled; verify flow claims in named modules.",
+    "overview": "README pre-compiled; fill integrations + verification only.",
 }
 
 
@@ -298,50 +298,84 @@ def format_incomplete_services_warning(missing: list[str]) -> str:
     return f"Incomplete service folders — missing: {preview}{suffix}"
 
 
+def group_missing_by_service(missing: list[str]) -> dict[str, list[str]]:
+    grouped: dict[str, list[str]] = {}
+    for entry in missing:
+        if "/" not in entry:
+            continue
+        service_name, remainder = entry.split("/", 1)
+        if " (invalid)" in remainder:
+            grouped.setdefault(service_name, []).append(remainder)
+            continue
+        grouped.setdefault(service_name, []).append(remainder)
+    return {
+        service: sorted(files, key=str.lower)
+        for service, files in sorted(grouped.items(), key=lambda item: item[0].lower())
+    }
+
+
+def format_service_completion_block(
+    service_name: str,
+    missing_files: list[str],
+    pattern: ServiceDocPattern | None,
+    *,
+    loreport_dir: str = LOREPORT_DIR,
+) -> str:
+    folder = f"{loreport_dir}/services/{service_name}/"
+    lines = [
+        f"### `{service_name}` — INCOMPLETE",
+        f"- Loreport folder: `{folder}`",
+        "- Missing files (write ALL of these now):",
+    ]
+    for filename in missing_files:
+        lines.append(f"  - `{folder}{filename}`")
+    if pattern is not None:
+        lines.append("")
+        lines.append(format_service_pattern_summary(pattern, loreport_dir=loreport_dir))
+    return "\n".join(lines)
+
+
 COMPILED_ASPECT_RULES = """
-Compiled aspect page (`{loreport_dir}/services/<name>/<aspect>.md`) — full UI doc, NOT a path index.
+Compiled aspect pages are PRE-BUILT from human docs before your run.
 
-Write workflow per aspect:
-1. read_file every human file listed in _pattern.json for this aspect
-2. read_file code files needed to verify claims
-3. write compiled page with substance FROM human docs
+Page structure (already on disk):
+- `> source:` — provenance
+- `<!-- loreport:section:human-doc -->` + `## human-doc` — FULL human doc inside `<!-- loreport:human-doc:do-not-edit -->`
+- `<!-- loreport:section:code-verification -->` — placeholder table inside `<!-- loreport:verification:pending -->`
+- `<!-- loreport:section:details -->` — optional
 
-Required structure (ALL headings in OUTPUT LANGUAGE):
-- `> Источник: <human-path>` — provenance only
-- ## Замысел — concrete content extracted from human docs:
-  - api-surface: table method | path | назначение (from curl/openapi examples)
-  - messaging: table queue/event | payload | producer/consumer
-  - data-model: entities, fields, relations (from ER/spec)
-  - specification: sections: boundaries, modules, flows (from tech spec)
-  - Minimum 5 concrete rows/bullets sourced from human doc text
-- ## Сверка с кодом — one row per Intent claim (NOT per file):
-  | Заявление | Где в коде | Статус |
-  Статус: совпадает | расхождение | нет в коде | нет в документации
-- ## Детали — optional code-only findings (brief)
+Your job on aspect pages (NOT rewrite human docs):
+1. read_file the pre-compiled aspect page — claims are already listed in code-verification table
+2. read_file code to verify each claim with status `loreport:pending`
+3. edit_file ONLY the verification block between `<!-- loreport:verification:pending -->` markers
+4. Iterate: on convergence passes verify ONLY still-pending claims — do not re-check completed rows
+5. Replace shallow rows (file-existence checks) with specific claims from human doc
 
-FORBIDDEN on aspect pages:
-- Page that is mostly paths or "## Открытые файлы" as main body
-- Vague one-paragraph Intent without endpoints/queues/entities from human doc
-- Marking whole file "совпадает" without checking specific claims
-- English headings (# Api, # Messaging) when OUTPUT LANGUAGE is not English
+FORBIDDEN:
+- Rewriting, shortening, or summarizing human-doc section (between human-doc markers)
+- Removing `<!-- loreport:human-doc:do-not-edit -->` markers
+- Verification rows that only assert a file/module exists — verify SPECIFIC claims
+- Replacing full human doc with bullet summary
 """.strip()
 
 INDEX_FILE_RULES = """
-index.md — short service hub (NOT a duplicate of all aspects):
-- ## Назначение — one paragraph
-- ## Разделы документации — links to sibling aspect .md in same folder
-- ## Интеграции — compact cross-service table
-- ## Критичные расхождения — top items with link to drift.md
-FORBIDDEN on index.md: long file inventories, duplicating aspect Intent tables.
+index.md is PRE-BUILT with full README/human overview in human-doc section.
+
+Your job on index.md:
+- Keep human-doc section unchanged (between human-doc markers)
+- Fill integrations section from human docs + code evidence
+- Fill code-verification table with top-level service claims (not per-file checks)
+- Update drift-summary section with link to drift.md + top 3 items
+FORBIDDEN: replacing README body with one-paragraph summary.
 """.strip()
 
 DRIFT_FILE_RULES = """
 Drift registry (`{loreport_dir}/services/<name>/drift.md`):
-- Sections in OUTPUT LANGUAGE: ## Критично, ## Предупреждение, ## Информация
-- Each item: `категория на OUTPUT LANGUAGE` — конкретное расхождение: цитата/тема из human doc +
-  конкретное место в коде + что не сходится
-- Gap category labels MUST be translated — never English labels in Russian pages
-- FORBIDDEN: vague "нужно подтвердить в main.py" when main.py was read; vague navigation-only items
+- Sections: `critical`, `warning`, `info` (translate slug headings to OUTPUT LANGUAGE)
+- Each item: `category in OUTPUT LANGUAGE` — concrete drift: quote/topic from human doc +
+  concrete code location + what diverges
+- Gap category labels MUST match OUTPUT LANGUAGE
+- FORBIDDEN: vague "confirm in main.py" when main.py was read; navigation-only items
 - Code = implementation truth; human docs = intent truth
 """.strip()
 

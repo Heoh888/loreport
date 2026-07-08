@@ -24,6 +24,7 @@ class Settings(BaseSettings):
     loreport_max_parallel_subagents: int = 5
     loreport_subagent_model_id: str | None = None
     loreport_update_max_passes: int = 3
+    loreport_verification_convergence_passes: int = 5
 
     def resolved_database_url(self) -> str:
         if self.database_url:
