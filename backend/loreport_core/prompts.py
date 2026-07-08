@@ -109,7 +109,7 @@ Human documentation discipline:
 - Human docs are navigation hints — if they are thin, read more code, not less.
 - Use human docs to learn what the team considers important, then verify in source files.
 - If a service has rich `tech.docs/`, pages are pre-compiled with full human doc text in UI.
-- If human docs conflict with code, record in `drift.md` with severity and file evidence.
+- If human docs conflict with code, set verification status to `loreport:drift` (drift.md syncs automatically).
 - Gap "found in code, not in human docs" requires naming specific features from opened files.
 
 {INCOMPLETE_DOCS_CODE_DISCIPLINE}
@@ -462,10 +462,10 @@ Open verification items: {open_items}
 Workflow:
 1. read_file only the listed service pages
 2. read_file code for pending claims
-3. edit_file ONLY `<!-- loreport:verification:pending -->` block and drift.md
+3. edit_file ONLY `<!-- loreport:verification:pending -->` block (drift.md is synced from verification)
 4. Do NOT touch `<!-- loreport:human-doc:do-not-edit -->`
 5. Replace shallow rows (file-existence checks) with specific claims from human doc
-6. Status values in OUTPUT LANGUAGE; replace `loreport:pending` when verified
+6. Status tokens: `loreport:match` | `loreport:drift` | `loreport:missing-code` | `loreport:missing-doc`
 
 {lang_policy}
 

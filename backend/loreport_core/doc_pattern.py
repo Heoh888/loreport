@@ -345,11 +345,11 @@ Page structure (already on disk):
 - `<!-- loreport:section:details -->` — optional
 
 Your job on aspect pages (NOT rewrite human docs):
-1. read_file the pre-compiled aspect page — claims are already listed in code-verification table
-2. read_file code to verify each claim with status `loreport:pending`
+1. read_file the pre-compiled aspect page — concrete claims (endpoints, queues) may be pre-listed
+2. read_file code to verify each claim; add rows for behavioral facts from human-doc prose
 3. edit_file ONLY the verification block between `<!-- loreport:verification:pending -->` markers
-4. Iterate: on convergence passes verify ONLY still-pending claims — do not re-check completed rows
-5. Replace shallow rows (file-existence checks) with specific claims from human doc
+4. Set status to `loreport:match` | `loreport:drift` | `loreport:missing-code` | `loreport:missing-doc`
+5. drift.md is rebuilt automatically from verification — do not edit drift.md manually
 
 FORBIDDEN:
 - Rewriting, shortening, or summarizing human-doc section (between human-doc markers)
@@ -371,11 +371,10 @@ FORBIDDEN: replacing README body with one-paragraph summary.
 
 DRIFT_FILE_RULES = """
 Drift registry (`{loreport_dir}/services/<name>/drift.md`):
-- Sections: `critical`, `warning`, `info` (translate slug headings to OUTPUT LANGUAGE)
-- Each item: `category in OUTPUT LANGUAGE` — concrete drift: quote/topic from human doc +
-  concrete code location + what diverges
-- Gap category labels MUST match OUTPUT LANGUAGE
-- FORBIDDEN: vague "confirm in main.py" when main.py was read; navigation-only items
+- Built automatically from code-verification tables — do NOT edit drift.md manually
+- Set verification status tokens: `loreport:match` | `loreport:drift` | `loreport:missing-code` | `loreport:missing-doc`
+- Non-match rows appear in drift.md by severity (`critical` / `warning` / `info`)
+- When no drift: `<!-- loreport:drift:none -->` in critical section
 - Code = implementation truth; human docs = intent truth
 """.strip()
 

@@ -14,7 +14,13 @@ DRIFT_PENDING = "<!-- loreport:section:drift:pending -->"
 DETAILS_PENDING = "<!-- loreport:section:details:pending -->"
 
 STATUS_PENDING = "loreport:pending"
+STATUS_MATCH = "loreport:match"
+STATUS_DRIFT = "loreport:drift"
+STATUS_MISSING_CODE = "loreport:missing-code"
+STATUS_MISSING_DOC = "loreport:missing-doc"
 CLAIM_PLACEHOLDER = "loreport:claim:pending"
+
+DRIFT_NONE = "<!-- loreport:drift:none -->"
 
 SECTION_HUMAN_DOC = "human-doc"
 SECTION_VERIFICATION = "code-verification"

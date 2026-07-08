@@ -333,14 +333,14 @@ def format_eval_workflow_block(
     lang_policy = output_language_policy(language)
     action = (
         "Read pre-compiled loreport/services/<name>/*.md (human docs already transcluded). "
-        "edit_file verification and drift sections only; then quickstart and platform."
+        "edit_file verification sections only; drift.md syncs from verification after each pass; then quickstart and platform."
         if command == "init"
-        else "Update verification/drift sections in affected loreport/services/<name>/ folders."
+        else "Update verification sections in affected loreport/services/<name>/ folders (drift.md syncs automatically)."
     )
     shallow_rule = (
         "5. For services in shallowServices or with stillShallow=true: read entrypoint, routes, "
         "and every cited path before editing verification.\n"
-        "6. NEVER rewrite human-doc section — only fill code-verification and drift.md.\n"
+        "6. NEVER rewrite human-doc section — only fill code-verification table; drift.md is synced by Loreport.\n"
         "7. VERIFY every required file from _pattern.json exists before ending the run."
     )
     return f"""

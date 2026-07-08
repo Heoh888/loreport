@@ -1,46 +1,12 @@
 from __future__ import annotations
 
-import re
 from dataclasses import dataclass
 from pathlib import Path
 
-from loreport_core.claim_extract import (
-    has_concrete_claim_shape,
-    is_pending_verification_status,
-    is_shallow_verification_claim,
-)
-from loreport_core.compile_markers import (
-    DRIFT_PENDING,
-    INTEGRATIONS_PENDING,
-    VERIFICATION_BEGIN,
-    VERIFICATION_END,
-)
+from loreport_core.compile_markers import DRIFT_NONE, DRIFT_PENDING, INTEGRATIONS_PENDING
 from loreport_core.constants import LOREPORT_DIR
 from loreport_core.doc_pattern import DRIFT_FILE, ServiceDocPattern
-
-_VERIFICATION_ROW_RE = re.compile(
-    r"^\|\s*(.+?)\s*\|\s*(.+?)\s*\|\s*(.+?)\s*\|$",
-    re.MULTILINE,
-)
-
-
-@dataclass(frozen=True, slots=True)
-class VerificationRow:
-    claim: str
-    code_ref: str
-    status: str
-
-    @property
-    def is_pending(self) -> bool:
-        return is_pending_verification_status(self.status)
-
-    @property
-    def is_shallow(self) -> bool:
-        if is_shallow_verification_claim(self.claim):
-            return True
-        if self.code_ref and not has_concrete_claim_shape(self.claim):
-            return bool(re.search(r"\.(py|ts|tsx|go|rs|java)\b", self.code_ref, re.I))
-        return False
+from loreport_core.verification_parse import parse_verification_rows
 
 
 @dataclass(frozen=True, slots=True)
@@ -53,29 +19,6 @@ class PendingVerificationTarget:
     has_placeholder: bool
     integrations_pending: bool = False
     drift_pending: bool = False
-
-
-def _parse_verification_rows(content: str) -> list[VerificationRow]:
-    block_match = re.search(
-        rf"{re.escape(VERIFICATION_BEGIN)}(.*?){re.escape(VERIFICATION_END)}",
-        content,
-        re.DOTALL,
-    )
-    block = block_match.group(1) if block_match else content
-
-    rows: list[VerificationRow] = []
-    for match in _VERIFICATION_ROW_RE.finditer(block):
-        claim, code_ref, status = match.group(1), match.group(2), match.group(3)
-        if claim.strip("- ").lower() in {"claim", "---"}:
-            continue
-        rows.append(
-            VerificationRow(
-                claim=claim.strip(),
-                code_ref=code_ref.strip(),
-                status=status.strip(),
-            )
-        )
-    return rows
 
 
 def _aspect_id_for_file(pattern: ServiceDocPattern, loreport_file: str) -> str:
@@ -101,7 +44,7 @@ def _drift_pending(
         content = drift_path.read_text(encoding="utf-8")
     except OSError:
         return True
-    return DRIFT_PENDING in content
+    return DRIFT_PENDING in content and DRIFT_NONE not in content
 
 
 def analyze_service_page(
@@ -113,7 +56,7 @@ def analyze_service_page(
     language: str | None = None,
     drift_pending: bool = False,
 ) -> PendingVerificationTarget | None:
-    rows = _parse_verification_rows(content)
+    rows = parse_verification_rows(content)
     has_placeholder = not rows or all(row.is_pending for row in rows)
     pending = tuple(row.claim for row in rows if row.is_pending)
     shallow = tuple(row.claim for row in rows if row.is_shallow)
@@ -245,6 +188,6 @@ def format_convergence_targets_block(
                 "(`<!-- loreport:section:integrations:pending -->`)"
             )
         if target.drift_pending:
-            lines.append("- Fill drift.md from verification results")
+            lines.append("- drift.md will sync after verification (focus on status tokens)")
         blocks.append("\n".join(lines))
     return "\n\n".join(blocks)

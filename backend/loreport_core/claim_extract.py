@@ -2,7 +2,14 @@ from __future__ import annotations
 
 import re
 
-from loreport_core.compile_markers import CLAIM_PLACEHOLDER, STATUS_PENDING
+from loreport_core.compile_markers import (
+    CLAIM_PLACEHOLDER,
+    STATUS_DRIFT,
+    STATUS_MATCH,
+    STATUS_MISSING_CODE,
+    STATUS_MISSING_DOC,
+    STATUS_PENDING,
+)
 
 _HTTP_METHOD_RE = re.compile(
     r"\b(GET|POST|PUT|PATCH|DELETE|OPTIONS|HEAD)\s+(`?)(/[\w\-./:{}]+)\2",
@@ -13,7 +20,6 @@ _CURL_RE = re.compile(
     re.IGNORECASE,
 )
 _PATH_IN_BACKTICKS_RE = re.compile(r"`(/[\w\-./:{}]+)`")
-_HEADING_RE = re.compile(r"^#{2,4}\s+(.+)$", re.MULTILINE)
 # Technical tokens — same in code/config regardless of doc human language.
 _QUEUE_RE = re.compile(
     r"(?:queue|exchange|routing[_\s-]?key|event|topic)[\s:]+[`\"']?([\w.-]+)",
@@ -26,6 +32,10 @@ _ENTITY_WORD_RE = re.compile(
 )
 _SOURCE_FILE_IN_CLAIM_RE = re.compile(
     r"[/\\]?[\w./-]+\.(py|ts|tsx|go|rs|java|rb|php|kt)\b",
+    re.IGNORECASE,
+)
+_TECHNICAL_TOKEN_RE = re.compile(
+    r"[`/\\:=@]|\b\d{2,}\b|\b(GET|POST|PUT|PATCH|DELETE|OPTIONS|HEAD)\b",
     re.IGNORECASE,
 )
 _LINE_REF_RE = re.compile(r":\d+\b")
@@ -77,6 +87,15 @@ def _extract_messaging(markdown: str) -> list[str]:
     return claims
 
 
+def _extract_concrete_claims(markdown: str) -> list[str]:
+    """Structural facts identifiable without LLM — not section titles."""
+    claims: list[str] = []
+    claims.extend(_extract_endpoints(markdown))
+    claims.extend(f"queue/event: {name}" for name in _QUEUE_RE.findall(markdown))
+    claims.extend(f"entity: {name}" for name in _ENTITY_WORD_RE.findall(markdown))
+    return claims
+
+
 def _extract_data_model(markdown: str) -> list[str]:
     claims = [f"entity: {name}" for name in _ENTITY_WORD_RE.findall(markdown)]
     for match in _TABLE_ROW_RE.finditer(markdown):
@@ -85,12 +104,7 @@ def _extract_data_model(markdown: str) -> list[str]:
             continue
         if len(cell) <= 48 and re.search(r"\w", cell):
             claims.append(cell)
-    claims.extend(_normalize_claim(h) for h in _HEADING_RE.findall(markdown))
     return claims
-
-
-def _extract_headings(markdown: str) -> list[str]:
-    return [_normalize_claim(h) for h in _HEADING_RE.findall(markdown)]
 
 
 def extract_claims_for_aspect(markdown: str, aspect_id: str) -> list[str]:
@@ -104,9 +118,7 @@ def extract_claims_for_aspect(markdown: str, aspect_id: str) -> list[str]:
     elif aspect_id == "data-model":
         claims = _extract_data_model(markdown)
     else:
-        claims = _extract_headings(markdown)
-        if aspect_id == "specification":
-            claims.extend(_extract_endpoints(markdown))
+        claims = _extract_concrete_claims(markdown)
 
     return _dedupe_claims(claims)
 
@@ -124,19 +136,17 @@ def has_concrete_claim_shape(claim: str) -> bool:
 
 
 def is_shallow_verification_claim(claim: str) -> bool:
-    """Structural: file-existence row, not a testable fact from human doc."""
+    """Structural: section title or navigation label, not a testable fact."""
     normalized = _normalize_claim(claim)
     if not normalized or normalized == CLAIM_PLACEHOLDER:
         return False
     if has_concrete_claim_shape(normalized):
         return False
-    # Claim column cites a source file as the subject instead of a behavior/API fact.
     if _SOURCE_FILE_IN_CLAIM_RE.search(normalized):
         return True
-    # Very short claim with no URL path, method, or structured prefix.
-    if len(normalized.split()) <= 6 and "/" not in normalized:
-        return bool(_SOURCE_FILE_IN_CLAIM_RE.search(normalized))
-    return False
+    if _TECHNICAL_TOKEN_RE.search(normalized):
+        return False
+    return True
 
 
 def is_pending_verification_status(status: str) -> bool:
@@ -144,3 +154,33 @@ def is_pending_verification_status(status: str) -> bool:
     if not normalized:
         return True
     return normalized in {STATUS_PENDING, CLAIM_PLACEHOLDER}
+
+
+def is_match_verification_status(status: str) -> bool:
+    normalized = status.strip().lower()
+    if is_pending_verification_status(status):
+        return False
+    if normalized == STATUS_MATCH or normalized.startswith(f"{STATUS_MATCH}:"):
+        return True
+    return normalized in {"ok", "match", "aligned"}
+
+
+def drift_severity_for_status(status: str) -> str | None:
+    normalized = status.strip().lower()
+    if is_pending_verification_status(status) or is_match_verification_status(status):
+        return None
+    if (
+        normalized == STATUS_DRIFT
+        or normalized.startswith(f"{STATUS_DRIFT}:")
+        or normalized == STATUS_MISSING_CODE
+        or normalized.startswith(f"{STATUS_MISSING_CODE}:")
+    ):
+        return "critical"
+    if (
+        normalized == STATUS_MISSING_DOC
+        or normalized.startswith(f"{STATUS_MISSING_DOC}:")
+    ):
+        return "warning"
+    if normalized:
+        return "warning"
+    return None

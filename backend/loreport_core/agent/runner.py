@@ -22,6 +22,7 @@ from loreport_core.constants import (
 )
 from loreport_core.doc_pattern import (
     IncompleteLoreportError,
+    ServiceDocPattern,
     discover_repo_doc_patterns,
     find_incomplete_service_folders,
     format_doc_patterns_block,
@@ -29,6 +30,7 @@ from loreport_core.doc_pattern import (
     group_missing_by_service,
     write_service_patterns,
 )
+from loreport_core.drift_sync import sync_repo_drift
 from loreport_core.git import create_run_context, write_last_update_metadata
 from loreport_core.human_doc_compile import write_compiled_drafts
 from loreport_core.prompts import (
@@ -62,6 +64,16 @@ DEFAULT_UPDATE_MAX_PASSES = 3
 DEFAULT_INIT_COMPLETION_PASSES = 3
 DEFAULT_VERIFICATION_CONVERGENCE_PASSES = 5
 UPDATE_WORKFLOW_SERVICE_THRESHOLD = 3
+
+
+def _sync_service_drifts(
+    repo_path: Path,
+    patterns: dict[str, ServiceDocPattern],
+    *,
+    loreport_dir: str,
+) -> None:
+    synced = sync_repo_drift(repo_path, patterns, loreport_dir=loreport_dir)
+    logger.info("Synced drift.md from verification tables for %d services", synced)
 
 
 def _create_thread_id(repo_path: Path) -> str:
@@ -254,6 +266,8 @@ async def run_loreport_agent(
         subagent_model_id=subagent_model_id,
     )
 
+    _sync_service_drifts(repo_path, doc_patterns, loreport_dir=loreport_dir)
+
     missing = find_incomplete_service_folders(repo_path, loreport_dir=loreport_dir)
     if missing and command == "init" and init_completion_passes > 0:
         for pass_number in range(1, init_completion_passes + 1):
@@ -301,6 +315,7 @@ async def run_loreport_agent(
                 dynamic_workflow=False,
                 subagent_model_id=subagent_model_id,
             )
+            _sync_service_drifts(repo_path, doc_patterns, loreport_dir=loreport_dir)
             missing = find_incomplete_service_folders(repo_path, loreport_dir=loreport_dir)
             if not missing:
                 break
@@ -358,6 +373,7 @@ async def run_loreport_agent(
                 dynamic_workflow=False,
                 subagent_model_id=subagent_model_id,
             )
+            _sync_service_drifts(repo_path, doc_patterns, loreport_dir=loreport_dir)
 
             next_targets = find_pending_verification_targets(
                 repo_path,
@@ -369,6 +385,8 @@ async def run_loreport_agent(
                 logger.info("Verification converged after pass %d", pass_number)
                 break
             prev_snapshot = verification_progress_snapshot(next_targets)
+
+    _sync_service_drifts(repo_path, doc_patterns, loreport_dir=loreport_dir)
 
     after = create_loreport_content_snapshot(repo_path, loreport_dir)
     changed = before != after
